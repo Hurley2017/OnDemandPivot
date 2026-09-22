@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Client Profitability Analytics — Dashboard</title>
     <link rel="icon"
-          href="{{ url_for('static', filename='icon/Tab Logo.png') }}?v={{ asset_version('icon/Tab Logo.png') }}">
+          href="{{ url_for('static', filename='icon/favicon.png') }}?v={{ asset_version('icon/favicon.png') }}">
 
     <!-- Perspective v3.8.0 (CDN). The viewer bundle self-initialises its WASM
          relative to its own URL, so no manual init_client/init_server call is
@@ -21,25 +21,21 @@
 </head>
 <body class="page-dashboard">
 
-<div class="topbar">
-    <span><strong>Client Profitability Analytics</strong> &nbsp;·&nbsp; Local Data Analysis</span>
-    <span><span class="dot"></span>Runs entirely on this machine — no data leaves your browser</span>
-</div>
-
-<header class="app-header">
+<header class="site-header">
     <div class="brand">
         <img class="brand-logo"
              src="{{ url_for('static', filename='icon/LOGO.PNG') }}"
-             alt="Client Profitability Analytics logo">
+             alt="Client Profitability Analytics">
+        <span class="brand-divider" aria-hidden="true"></span>
         <div class="brand-text">
-            <span class="brand-name">Client Profitability <span>Analytics</span></span>
+            <span class="brand-name">Client Profitability Analytics</span>
             <span class="brand-tag">On Device Self-Service Workbench</span>
         </div>
     </div>
-    <div class="header-actions header-actions-stacked">
-        <div class="dataset-meta">
-            <span class="dataset-file" id="navFile" title="{{ filename }}">{{ filename }}</span>
-            <span class="dataset-sub" id="navMeta">
+    <div class="header-meta header-meta-actions">
+        <div class="meta-block">
+            <span class="meta-file" id="navFile" title="{{ filename }}">{{ filename }}</span>
+            <span class="meta-sub" id="navMeta">
                 {{ rows }} rows × {{ cols }} cols · {{ flagged }} flagged
             </span>
         </div>
@@ -49,55 +45,52 @@
 
 <div id="loadError" class="notice notice-error" hidden></div>
 
+<!-- ============================== COMMAND BAR ============================= -->
+<div class="command-bar">
+    <div class="cmd-group cmd-view">
+        <label for="viewSelect">View</label>
+        <select id="viewSelect"></select>
+    </div>
+
+    <span class="cmd-divider" aria-hidden="true"></span>
+
+    <div class="cmd-group">
+        <label for="groupBy">Group by</label>
+        <select id="groupBy"><option value="">— none —</option></select>
+    </div>
+
+    <div class="cmd-group">
+        <label for="splitBy">Split by</label>
+        <select id="splitBy"><option value="">— none —</option></select>
+    </div>
+
+    <div class="cmd-group">
+        <label for="measure">Values</label>
+        <select id="measure"><option value="">— all —</option></select>
+    </div>
+
+    <div class="cmd-actions">
+        <button class="btn btn-ghost btn-sm" id="settingsBtn" type="button"
+                title="Show or hide Perspective's own drag-and-drop field panel">
+            Pivot panel
+        </button>
+        <button class="btn btn-ghost btn-sm" id="resetBtn" type="button">
+            Reset
+        </button>
+        <button class="btn btn-dark btn-sm" id="downloadBtn" type="button">
+            Download
+        </button>
+    </div>
+</div>
+
 <main class="dash-layout">
 
-    <!-- ============================ MAIN COLUMN ============================ -->
+    <!-- ============================ VIEWER ============================= -->
     <div class="dash-main">
-
-        <!-- Toolbar -->
-        <div class="toolbar">
-            <div class="toolbar-group">
-                <label>View</label>
-                <div class="view-switch" id="viewSwitch" role="tablist"></div>
-            </div>
-
-            <div class="toolbar-divider" aria-hidden="true"></div>
-
-            <div class="toolbar-group">
-                <label for="groupBy">Rows</label>
-                <select id="groupBy"><option value="">— none —</option></select>
-            </div>
-
-            <div class="toolbar-group">
-                <label for="splitBy">Cols</label>
-                <select id="splitBy"><option value="">— none —</option></select>
-            </div>
-
-            <div class="toolbar-group">
-                <label for="measure">Values</label>
-                <select id="measure"><option value="">— all —</option></select>
-            </div>
-
-            <div class="toolbar-divider" aria-hidden="true"></div>
-
-            <div class="toolbar-group toolbar-end">
-                <button class="btn btn-ghost btn-sm" id="settingsBtn" type="button">
-                    Pivot panel
-                </button>
-                <button class="btn btn-ghost btn-sm" id="resetBtn" type="button">
-                    Reset
-                </button>
-                <button class="btn btn-dark btn-sm" id="downloadBtn" type="button">
-                    Download
-                </button>
-            </div>
-        </div>
-
-        <!-- Viewer -->
         <div class="viewer-shell">
             <div class="viewer-caption">
-                <span>Interactive pivot table &amp; chart builder
-                    <b>— drag columns to re-pivot</b></span>
+                <span>Drag fields between the shelves in the
+                    <b>Pivot panel</b> — or use the selects above</span>
                 <span id="viewerStatus">Loading data…</span>
             </div>
             <!-- The d3fc chart palette (--d3fc-series, grids, gradients) is
@@ -108,21 +101,8 @@
         </div>
     </div>
 
-    <!-- ============================ SIDE PANEL ============================= -->
+    <!-- =========================== SIDE PANEL =========================== -->
     <aside class="side-panel">
-        <section class="card">
-            <div class="card-head">
-                <h2>KPI information</h2>
-                <span class="tag" id="kpiTag">—</span>
-            </div>
-            <div class="kpi-list" id="kpiList">
-                <div class="panel-empty">Loading column metadata…</div>
-            </div>
-            <div class="kpi-detail" id="kpiDetail">
-                <div class="panel-empty">Select a KPI above to inspect its profile.</div>
-            </div>
-        </section>
-
         <section class="card">
             <div class="card-head">
                 <h2>Dataset summary</h2>
@@ -130,6 +110,19 @@
             </div>
             <div class="card-body">
                 <div class="stat-grid stat-grid-tight" id="summaryStats"></div>
+            </div>
+        </section>
+
+        <section class="card">
+            <div class="card-head">
+                <h2>Column explorer</h2>
+                <span class="tag" id="kpiTag">—</span>
+            </div>
+            <div class="kpi-list" id="kpiList">
+                <div class="panel-empty">Loading column metadata…</div>
+            </div>
+            <div class="kpi-detail" id="kpiDetail">
+                <div class="panel-empty">Pick a column above to inspect its profile.</div>
             </div>
         </section>
     </aside>
@@ -150,15 +143,13 @@
                 aria-label="Close chat">×</button>
     </div>
 
-    <!-- BYO model connection ------------------------------------------- -->
     <details class="chat-config" id="chatConfig">
         <summary>Connect your own model</summary>
         <div class="chat-config-body">
             <div class="field">
                 <label for="chatEndpoint">Endpoint</label>
                 <input id="chatEndpoint" type="text" autocomplete="off"
-                       spellcheck="false"
-                       placeholder="https://api.openai.com/v1">
+                       spellcheck="false" placeholder="https://api.openai.com/v1">
                 <div class="help">
                     Base URL or full <code>/chat/completions</code> URL of any
                     OpenAI-compatible provider.
@@ -170,8 +161,8 @@
                 <input id="chatKey" type="password" autocomplete="off"
                        spellcheck="false" placeholder="sk-…">
                 <div class="help">
-                    Stored only in this browser and sent over loopback to this
-                    app when you press Send.
+                    Kept in this browser only, and sent over loopback to this app
+                    when you press Send.
                 </div>
             </div>
 

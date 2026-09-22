@@ -49,19 +49,19 @@ const state = {
  * below always resolves a full, valid config or is refused up front.
  */
 const VIEW_SPECS = [
-    { label: "Grid", plugin: "Datagrid", kind: "grid" },
-    { label: "Bar", plugin: "Y Bar", kind: "chart" },
-    { label: "Column", plugin: "X Bar", kind: "chart" },
-    { label: "Line", plugin: "Y Line", kind: "chart" },
-    { label: "Area", plugin: "Y Area", kind: "chart" },
-    { label: "Scatter", plugin: "Y Scatter", kind: "chart" },
-    { label: "Scatter XY", plugin: "X/Y Scatter", kind: "xy" },
-    { label: "Line XY", plugin: "X/Y Line", kind: "xy" },
-    { label: "Heatmap", plugin: "Heatmap", kind: "heatmap" },
-    { label: "Treemap", plugin: "Treemap", kind: "tree" },
-    { label: "Sunburst", plugin: "Sunburst", kind: "tree" },
-    { label: "OHLC", plugin: "OHLC", kind: "ohlc" },
-    { label: "Candles", plugin: "Candlestick", kind: "ohlc" },
+    { label: "Grid — pivot table", plugin: "Datagrid", kind: "grid", group: "Table" },
+    { label: "Bar chart", plugin: "Y Bar", kind: "chart", group: "Charts" },
+    { label: "Column chart", plugin: "X Bar", kind: "chart", group: "Charts" },
+    { label: "Line chart", plugin: "Y Line", kind: "chart", group: "Charts" },
+    { label: "Area chart", plugin: "Y Area", kind: "chart", group: "Charts" },
+    { label: "Scatter", plugin: "Y Scatter", kind: "chart", group: "Charts" },
+    { label: "Scatter X/Y", plugin: "X/Y Scatter", kind: "xy", group: "X/Y charts" },
+    { label: "Line X/Y", plugin: "X/Y Line", kind: "xy", group: "X/Y charts" },
+    { label: "Heatmap", plugin: "Heatmap", kind: "heatmap", group: "Hierarchy & density" },
+    { label: "Treemap", plugin: "Treemap", kind: "tree", group: "Hierarchy & density" },
+    { label: "Sunburst", plugin: "Sunburst", kind: "tree", group: "Hierarchy & density" },
+    { label: "OHLC bars", plugin: "OHLC", kind: "ohlc", group: "Financial" },
+    { label: "Candlestick", plugin: "Candlestick", kind: "ohlc", group: "Financial" },
 ];
 
 /** Keys Perspective's Table.view() accepts (the viewer config has extras). */
@@ -135,33 +135,46 @@ async function getRegisteredPlugins() {
     return VIEW_SPECS.map((v) => v.plugin);
 }
 
-async function renderViewSwitch() {
-    const host = $("viewSwitch");
+async function renderViewSelect() {
+    const select = $("viewSelect");
     state.registered = await getRegisteredPlugins();
 
-    // Only offer views that Perspective actually registered *and* that we
-    // know how to configure safely.
+    // Only offer views that Perspective actually registered *and* that we know
+    // how to configure safely. Options are grouped so the list stays scannable.
     let views = VIEW_SPECS.filter((v) => state.registered.includes(v.plugin));
     if (!views.length) views = [VIEW_SPECS[0]];
 
-    host.innerHTML = views
+    const groups = new Map();
+    views.forEach((v) => {
+        const key = v.group || "Other";
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(v);
+    });
+
+    select.innerHTML = [...groups.entries()]
         .map(
-            (v) => `
-        <button class="view-btn${v.plugin === state.plugin ? " is-active" : ""}"
-                type="button" role="tab"
-                data-plugin="${escapeHtml(v.plugin)}">${escapeHtml(v.label)}</button>`
+            ([group, items]) =>
+                `<optgroup label="${escapeHtml(group)}">` +
+                items
+                    .map(
+                        (v) =>
+                            `<option value="${escapeHtml(v.plugin)}">` +
+                            `${escapeHtml(v.label)}</option>`
+                    )
+                    .join("") +
+                "</optgroup>"
         )
         .join("");
 
-    host.querySelectorAll(".view-btn").forEach((btn) => {
-        btn.addEventListener("click", () => selectView(btn.dataset.plugin));
-    });
+    select.value = state.plugin;
+    select.addEventListener("change", (e) => selectView(e.target.value));
 }
 
 function markActiveView() {
-    document.querySelectorAll(".view-btn").forEach((btn) => {
-        btn.classList.toggle("is-active", btn.dataset.plugin === state.plugin);
-    });
+    const select = $("viewSelect");
+    if (select && state.registered.includes(state.plugin)) {
+        select.value = state.plugin;
+    }
     const dl = $("downloadBtn");
     if (dl) {
         dl.textContent =
@@ -1078,7 +1091,7 @@ async function main() {
     try {
         await loadKpis();
         buildToolbar();
-        await renderViewSwitch();
+        await renderViewSelect();
         await loadPerspective();
     } catch (err) {
         fail(err && err.message ? err.message : String(err));

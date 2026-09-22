@@ -5,86 +5,78 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Client Profitability Analytics — Import Data</title>
     <link rel="icon"
-          href="{{ url_for('static', filename='icon/Tab Logo.png') }}?v={{ asset_version('icon/Tab Logo.png') }}">
+          href="{{ url_for('static', filename='icon/favicon.png') }}?v={{ asset_version('icon/favicon.png') }}">
     <link rel="stylesheet"
           href="{{ url_for('static', filename='css/style.css') }}?v={{ asset_version('css/style.css') }}">
 </head>
 <body class="page-upload">
 
-<div class="topbar">
-    <span><strong>Client Profitability Analytics</strong> &nbsp;·&nbsp; Local Data Analysis</span>
-    <span><span class="dot"></span>Runs entirely on this machine — no data leaves your browser</span>
-</div>
-
-<header class="app-header">
+<header class="site-header">
     <div class="brand">
         <img class="brand-logo"
              src="{{ url_for('static', filename='icon/LOGO.PNG') }}"
-             alt="Client Profitability Analytics logo">
+             alt="Client Profitability Analytics">
+        <span class="brand-divider" aria-hidden="true"></span>
         <div class="brand-text">
-            <span class="brand-name">Client Profitability <span>Analytics</span></span>
+            <span class="brand-name">Client Profitability Analytics</span>
             <span class="brand-tag">On Device Self-Service Workbench</span>
         </div>
     </div>
-    <div class="header-actions">
-        <div class="dataset-meta">
-            <span class="dataset-file" id="navFile">No dataset loaded</span>
-            <span class="dataset-sub" id="navMeta">Step 1 of 2 — import &amp; structure</span>
-        </div>
+    <div class="header-meta">
+        <span class="meta-file" id="navFile">No dataset loaded</span>
+        <span class="meta-sub" id="navMeta">Import &amp; structure</span>
     </div>
 </header>
 
 <main class="page">
-    <div class="page-intro">
-        <h1>Upload your <em>data</em></h1>
+
+    <section class="hero">
+        <h1>Turn a spreadsheet into a <em>live pivot table</em></h1>
         <p>
-            Drop a CSV or Excel file to profile it, fix structural quirks such as
-            banner rows, leading columns or stray whitespace, then launch an
-            interactive Perspective pivot table and chart builder.
+            Drop in a CSV or Excel workbook. We profile every column, flag the
+            anomalies worth knowing about, then hand you a drag-and-drop pivot
+            grid and chart builder — all running locally on this machine.
         </p>
-    </div>
+    </section>
 
-    <div class="stack">
-
-        <!-- Step 1: drop zone ------------------------------------------------ -->
-        <section class="card">
-            <div class="card-head">
-                <h2><span class="step">1</span>Select a file</h2>
-                <div style="display:flex;gap:8px;align-items:center">
-                    <button class="btn btn-ghost btn-sm" id="sampleBtn" type="button">
-                        Load sample data
-                    </button>
-                    <span class="tag">Drag &amp; drop</span>
-                </div>
+    <!-- ================================================== 1. file ======= -->
+    <section class="card" id="dropCard">
+        <div class="card-head">
+            <h2><span class="step">1</span>Choose a file</h2>
+            <div class="head-tags">
+                <span class="tag">.csv</span>
+                <span class="tag">.xlsx</span>
+                <span class="tag">.xlsb</span>
+                <span class="tag">Max 100 MB</span>
             </div>
-            <div class="card-body">
-                <div id="dropzone" class="dropzone" tabindex="0" role="button"
-                     aria-label="Upload a CSV or Excel file">
-                    <div class="dz-icon" aria-hidden="true">⬆</div>
-                    <div class="dz-title">Drop your file here</div>
-                    <div class="dz-sub">or <b>browse</b> from your computer</div>
-                    <div class="dz-formats">
-                        <span class="tag">.csv</span>
-                        <span class="tag">.xlsx</span>
-                        <span class="tag">Max 100 MB</span>
-                    </div>
-                </div>
-                <input id="fileInput" class="file-input" type="file"
-                       accept=".csv,.xlsx">
-                <p id="fileMeta" class="dz-sub" style="margin-top:14px" hidden></p>
+        </div>
+        <div class="card-body">
+            <div id="dropzone" class="dropzone" tabindex="0" role="button"
+                 aria-label="Upload a CSV or Excel file">
+                <div class="dz-icon" aria-hidden="true">⬆</div>
+                <div class="dz-title">Drop your file here</div>
+                <div class="dz-sub">or <b>browse</b> from your computer</div>
             </div>
-        </section>
+            <input id="fileInput" class="file-input" type="file"
+                   accept=".csv,.xlsx,.xlsb">
+            <p id="fileMeta" class="file-meta" hidden></p>
+        </div>
+    </section>
 
-        <!-- Step 2: profile -------------------------------------------------- -->
-        <section id="profileCard" class="card" hidden>
-            <div class="card-head">
-                <h2><span class="step">2</span>Data profile &amp; KPI summary</h2>
-                <span id="profileTag" class="tag">Awaiting file</span>
-            </div>
-            <div class="card-body">
-                <div id="stats" class="stat-grid"></div>
+    <!-- =============================================== 2. profile ======= -->
+    <section class="card" id="profileCard" hidden>
+        <div class="card-head">
+            <h2><span class="step">2</span>What we found</h2>
+            <span id="profileTag" class="tag">Awaiting file</span>
+        </div>
+        <div class="card-body">
+            <div id="stats" class="stat-grid"></div>
 
-                <h3 class="section-label">Column profile</h3>
+            <details class="opt-group" id="profileTableGroup">
+                <summary>
+                    Column profile
+                    <span class="section-hint">type, missing values and anomalies per column</span>
+                </summary>
                 <div class="table-wrap">
                     <table class="data" id="profileTable">
                         <thead>
@@ -101,286 +93,275 @@
                         <tbody></tbody>
                     </table>
                 </div>
-            </div>
-        </section>
+            </details>
+        </div>
+    </section>
 
-        <!-- Step 3: restructure + preview ------------------------------------ -->
-        <section id="previewCard" class="card" hidden>
-            <div class="card-head">
-                <h2><span class="step">3</span>Restructure &amp; preview</h2>
-                <span id="previewTag" class="tag">—</span>
-            </div>
-            <div class="card-body">
+    <!-- =========================================== 3. restructure ======= -->
+    <section class="card" id="previewCard" hidden>
+        <div class="card-head">
+            <h2><span class="step">3</span>Shape it, then preview it</h2>
+            <span id="previewTag" class="tag">—</span>
+        </div>
 
-                <!-- ------------------------------------------------ structure -->
-                <div class="opt-group">
-                    <h3 class="section-label">
-                        Structure
-                        <span class="section-hint">where your table lives in the file</span>
-                    </h3>
-                    <div class="controls-grid">
+        <div class="card-body">
+            <div class="workbench">
 
-                        <div class="field">
-                            <label for="skipRows">Skip first N rows</label>
-                            <input id="skipRows" type="number" min="0" max="100000" value="0">
+                <!-- ------------------------------------- controls rail -->
+                <aside class="workbench-controls" id="controlsRail">
+
+                    <details class="opt-group" open>
+                        <summary>
+                            Structure
+                            <span class="section-hint">where the table sits in the file</span>
+                        </summary>
+
+                        <div class="field" id="sheetField" hidden>
+                            <label for="sheetSelect">Worksheet</label>
+                            <select id="sheetSelect"></select>
                             <div class="help">
-                                Drop title/banner rows above the real header.
+                                This workbook has more than one sheet — pick the
+                                one holding your table.
+                            </div>
+                        </div>
+
+                        <div class="field-row">
+                            <div class="field">
+                                <label for="skipRows">Skip first N rows</label>
+                                <input id="skipRows" type="number" min="0" max="100000" value="0">
+                                <div class="help">Banner or title rows above the header.</div>
+                            </div>
+                            <div class="field">
+                                <label for="skipLastRows">Skip last N rows</label>
+                                <input id="skipLastRows" type="number" min="0" max="100000" value="0">
+                                <div class="help">Trailing totals or footnotes.</div>
+                            </div>
+                        </div>
+
+                        <div class="field-row">
+                            <div class="field">
+                                <label for="skipCols">Skip first N columns</label>
+                                <input id="skipCols" type="number" min="0" max="10000" value="0">
+                                <div class="help">Leading ID or spacer columns.</div>
+                            </div>
+                            <div class="field">
+                                <label for="skipLastCols">Skip last N columns</label>
+                                <input id="skipLastCols" type="number" min="0" max="10000" value="0">
+                                <div class="help">Trailing summary columns.</div>
                             </div>
                         </div>
 
                         <div class="field">
-                            <label for="skipCols">Skip first N columns</label>
-                            <input id="skipCols" type="number" min="0" max="10000" value="0">
-                            <div class="help">
-                                Drop leading ID/note/spacer columns.
-                            </div>
-                        </div>
-
-                        <div class="field">
-                            <label for="skipLastRows">Skip last N rows</label>
-                            <input id="skipLastRows" type="number" min="0" max="100000" value="0">
-                            <div class="help">
-                                Drop trailing totals or footnote rows.
-                            </div>
-                        </div>
-
-                        <div class="field">
-                            <label for="skipLastCols">Skip last N columns</label>
-                            <input id="skipLastCols" type="number" min="0" max="10000" value="0">
-                            <div class="help">
-                                Drop trailing summary columns.
-                            </div>
-                        </div>
-
-                        <div class="field field-range">
                             <label for="dataRange">Data range
-                                <span class="tag">For power users</span>
+                                <span class="tag">Precise</span>
                             </label>
                             <input id="dataRange" type="text"
-                                   placeholder="B3:H500  ·  A:C  ·  2:5" autocomplete="off"
-                                   spellcheck="false">
+                                   placeholder="B3:H500   ·   A:C   ·   2:5"
+                                   autocomplete="off" spellcheck="false">
                             <div class="help">
-                                Already know where your table lives? Give the
-                                Excel-style range covering the <b>header row through
-                                the last data row</b>. Open-ended ranges work:
-                                <code>A:C</code> (columns only), <code>2:5</code>
-                                (rows only), <code>B3:H</code>. A range replaces
-                                “skip rows/columns” whenever it names a row.
+                                Know exactly where the table lives? Give the range
+                                from the <b>header row to the last data row</b>.
+                                Open-ended ranges work: <code>A:C</code> (columns),
+                                <code>2:5</code> (rows), <code>B3:H</code>. When a
+                                range names a row it overrides the skip boxes above.
                             </div>
                         </div>
+                    </details>
 
-                        <div class="field">
-                            <label>Table shape</label>
-                            <div class="checks">
-                                <label class="check">
-                                    <input type="checkbox" id="optHasHeader" checked>
-                                    <span>First row is a header
-                                        <span class="help">Uncheck for headerless files.</span>
-                                    </span>
-                                </label>
-                                <label class="check">
-                                    <input type="checkbox" id="optPromote">
-                                    <span>Promote first row to header
-                                        <span class="help">Use when the header sits inside the data, e.g. after transposing.</span>
-                                    </span>
-                                </label>
-                                <label class="check">
-                                    <input type="checkbox" id="optTranspose">
-                                    <span>Transpose (swap rows &amp; columns)
-                                        <span class="help">Turns a wide, sideways table upright.</span>
-                                    </span>
-                                </label>
-                            </div>
-                        </div>
-
-                    </div>
-                </div>
-
-                <!-- ----------------------------------------------------- rows -->
-                <details class="opt-group" id="groupRows">
-                    <summary>
-                        Rows
-                        <span class="section-hint">drop, de-duplicate and order records</span>
-                    </summary>
-                    <div class="controls-grid">
-                        <div class="field">
-                            <label>Row filters</label>
-                            <div class="checks">
-                                <label class="check">
-                                    <input type="checkbox" id="optDropRows" checked>
-                                    <span>Drop fully-empty rows</span>
-                                </label>
-                                <label class="check">
-                                    <input type="checkbox" id="optDropRowsNull">
-                                    <span>Drop rows containing any empty value</span>
-                                </label>
-                                <label class="check">
-                                    <input type="checkbox" id="optDedupe" checked>
-                                    <span>Remove duplicate rows</span>
-                                </label>
-                            </div>
-                        </div>
-
-                        <div class="field">
-                            <label for="dedupeKeep">When de-duplicating, keep</label>
-                            <select id="dedupeKeep">
-                                <option value="first">The first occurrence</option>
-                                <option value="last">The last occurrence</option>
-                            </select>
-                        </div>
-
-                        <div class="field">
-                            <label for="sortBy">Sort rows by</label>
-                            <select id="sortBy"><option value="">— leave as-is —</option></select>
-                            <label class="check" style="margin-top:8px">
-                                <input type="checkbox" id="sortDesc">
-                                <span>Descending</span>
+                    <details class="opt-group">
+                        <summary>
+                            Table shape
+                            <span class="section-hint">headers, orientation</span>
+                        </summary>
+                        <div class="checks">
+                            <label class="check">
+                                <input type="checkbox" id="optHasHeader" checked>
+                                <span>First row is a header
+                                    <span class="help">Uncheck for headerless files — columns become “Column 1…N”.</span>
+                                </span>
+                            </label>
+                            <label class="check">
+                                <input type="checkbox" id="optPromote">
+                                <span>Promote the first row to header
+                                    <span class="help">For headers that sit inside the data, e.g. after transposing.</span>
+                                </span>
+                            </label>
+                            <label class="check">
+                                <input type="checkbox" id="optTranspose">
+                                <span>Transpose — swap rows and columns
+                                    <span class="help">Turns a wide, sideways table upright.</span>
+                                </span>
                             </label>
                         </div>
-                    </div>
-                </details>
+                    </details>
 
-                <!-- -------------------------------------------------- columns -->
-                <details class="opt-group" id="groupCols">
-                    <summary>
-                        Columns
-                        <span class="section-hint">prune and rename fields</span>
-                    </summary>
-                    <div class="controls-grid">
-                        <div class="field">
-                            <label>Column filters</label>
-                            <div class="checks">
-                                <label class="check">
-                                    <input type="checkbox" id="optDropCols" checked>
-                                    <span>Drop fully-empty columns</span>
-                                </label>
-                                <label class="check">
-                                    <input type="checkbox" id="optConstantCols">
-                                    <span>Drop columns holding a single value</span>
-                                </label>
-                                <label class="check">
-                                    <input type="checkbox" id="optDuplicateCols">
-                                    <span>Drop duplicate columns</span>
-                                </label>
-                                <label class="check">
-                                    <input type="checkbox" id="optNormalizeCols">
-                                    <span>Normalise names to snake_case
-                                        <span class="help">“Gross Sales ($)” → “gross_sales”.</span>
-                                    </span>
+                    <details class="opt-group">
+                        <summary>
+                            Rows
+                            <span class="section-hint">filter, de-duplicate, order</span>
+                        </summary>
+                        <div class="checks">
+                            <label class="check">
+                                <input type="checkbox" id="optDropRows" checked>
+                                <span>Drop fully-empty rows</span>
+                            </label>
+                            <label class="check">
+                                <input type="checkbox" id="optDropRowsNull">
+                                <span>Drop rows containing any empty value</span>
+                            </label>
+                            <label class="check">
+                                <input type="checkbox" id="optDedupe" checked>
+                                <span>Remove duplicate rows</span>
+                            </label>
+                        </div>
+                        <div class="field-row">
+                            <div class="field">
+                                <label for="dedupeKeep">Keep which copy</label>
+                                <select id="dedupeKeep">
+                                    <option value="first">First occurrence</option>
+                                    <option value="last">Last occurrence</option>
+                                </select>
+                            </div>
+                            <div class="field">
+                                <label for="sortBy">Sort by</label>
+                                <select id="sortBy"><option value="">— leave as-is —</option></select>
+                                <label class="check check-inline">
+                                    <input type="checkbox" id="sortDesc">
+                                    <span>Descending</span>
                                 </label>
                             </div>
                         </div>
+                    </details>
 
-                        <div class="field">
-                            <label for="maxMissing">Drop columns over % missing</label>
-                            <input id="maxMissing" type="number" min="0" max="100"
-                                   step="1" value="0">
-                            <div class="help">0 keeps every column.</div>
+                    <details class="opt-group">
+                        <summary>
+                            Columns
+                            <span class="section-hint">prune and rename</span>
+                        </summary>
+                        <div class="checks">
+                            <label class="check">
+                                <input type="checkbox" id="optDropCols" checked>
+                                <span>Drop fully-empty columns</span>
+                            </label>
+                            <label class="check">
+                                <input type="checkbox" id="optConstantCols">
+                                <span>Drop columns holding a single value</span>
+                            </label>
+                            <label class="check">
+                                <input type="checkbox" id="optDuplicateCols">
+                                <span>Drop duplicate columns</span>
+                            </label>
+                            <label class="check">
+                                <input type="checkbox" id="optNormalizeCols">
+                                <span>Normalise names to snake_case
+                                    <span class="help">“Gross Sales ($)” → “gross_sales”.</span>
+                                </span>
+                            </label>
                         </div>
-
-                        <div class="field">
-                            <label for="dropCols">Drop columns by name</label>
-                            <input id="dropCols" type="text" autocomplete="off"
-                                   placeholder="Notes, Internal ID">
-                            <div class="help">Comma-separated; case-insensitive.</div>
-                        </div>
-                    </div>
-                </details>
-
-                <!-- --------------------------------------------------- values -->
-                <details class="opt-group" id="groupVals">
-                    <summary>
-                        Values
-                        <span class="section-hint">clean and normalise cell contents</span>
-                    </summary>
-                    <div class="controls-grid">
-                        <div class="field">
-                            <label>Text cleanup</label>
-                            <div class="checks">
-                                <label class="check">
-                                    <input type="checkbox" id="optStrip" checked>
-                                    <span>Trim surrounding whitespace</span>
-                                </label>
-                                <label class="check">
-                                    <input type="checkbox" id="optCoerceNumbers">
-                                    <span>Convert text numbers &amp; currency to numeric
-                                        <span class="help">“$1,234.50”, “(1,234)” and “12%” become numbers.</span>
-                                    </span>
-                                </label>
+                        <div class="field-row">
+                            <div class="field">
+                                <label for="maxMissing">Drop columns over % missing</label>
+                                <input id="maxMissing" type="number" min="0" max="100" step="1" value="0">
+                                <div class="help">0 keeps every column.</div>
+                            </div>
+                            <div class="field">
+                                <label for="dropCols">Drop columns by name</label>
+                                <input id="dropCols" type="text" autocomplete="off"
+                                       placeholder="Notes, Internal ID">
+                                <div class="help">Comma-separated, case-insensitive.</div>
                             </div>
                         </div>
+                    </details>
 
-                        <div class="field">
-                            <label for="textCase">Text case</label>
-                            <select id="textCase">
-                                <option value="none">Leave unchanged</option>
-                                <option value="lower">lowercase</option>
-                                <option value="upper">UPPERCASE</option>
-                                <option value="title">Title Case</option>
-                            </select>
-                            <div class="help">Applied to text columns only.</div>
+                    <details class="opt-group">
+                        <summary>
+                            Values
+                            <span class="section-hint">clean up what's inside the cells</span>
+                        </summary>
+                        <div class="checks">
+                            <label class="check">
+                                <input type="checkbox" id="optStrip" checked>
+                                <span>Trim surrounding whitespace</span>
+                            </label>
+                            <label class="check">
+                                <input type="checkbox" id="optCoerceNumbers">
+                                <span>Convert text numbers &amp; currency to numeric
+                                    <span class="help">“$1,234.50”, “(1,234)” and “12%” become numbers.</span>
+                                </span>
+                            </label>
                         </div>
-
-                        <div class="field">
-                            <label for="fillMissing">Fill missing values</label>
-                            <select id="fillMissing">
-                                <option value="none">Leave as blank</option>
-                                <option value="zero">Zero (numeric columns)</option>
-                                <option value="unknown">“Unknown” (text columns)</option>
-                                <option value="ffill">Copy the value above</option>
-                                <option value="bfill">Copy the value below</option>
-                                <option value="mean">Column mean</option>
-                                <option value="median">Column median</option>
-                                <option value="mode">Most common value</option>
-                            </select>
-                        </div>
-
-                        <div class="field">
-                            <label for="roundDecimals">Round numbers to N decimals</label>
-                            <input id="roundDecimals" type="number" min="-1" max="12"
-                                   step="1" value="-1">
-                            <div class="help">-1 leaves numbers untouched.</div>
-                        </div>
-
-                        <div class="field">
-                            <label for="replaceFind">Find &amp; replace</label>
-                            <div class="replace-row">
-                                <input id="replaceFind" type="text" autocomplete="off"
-                                       placeholder="find">
-                                <span aria-hidden="true">→</span>
-                                <input id="replaceWith" type="text" autocomplete="off"
-                                       placeholder="replace with">
+                        <div class="field-row">
+                            <div class="field">
+                                <label for="textCase">Text case</label>
+                                <select id="textCase">
+                                    <option value="none">Leave unchanged</option>
+                                    <option value="lower">lowercase</option>
+                                    <option value="upper">UPPERCASE</option>
+                                    <option value="title">Title Case</option>
+                                </select>
                             </div>
-                            <div class="help">Literal text, applied to text columns.</div>
+                            <div class="field">
+                                <label for="fillMissing">Fill missing values</label>
+                                <select id="fillMissing">
+                                    <option value="none">Leave as blank</option>
+                                    <option value="zero">Zero (numeric)</option>
+                                    <option value="unknown">“Unknown” (text)</option>
+                                    <option value="ffill">Copy the value above</option>
+                                    <option value="bfill">Copy the value below</option>
+                                    <option value="mean">Column mean</option>
+                                    <option value="median">Column median</option>
+                                    <option value="mode">Most common value</option>
+                                </select>
+                            </div>
                         </div>
-                    </div>
-                </details>
+                        <div class="field-row">
+                            <div class="field">
+                                <label for="roundDecimals">Round to N decimals</label>
+                                <input id="roundDecimals" type="number" min="-1" max="12" step="1" value="-1">
+                                <div class="help">-1 leaves numbers untouched.</div>
+                            </div>
+                            <div class="field">
+                                <label for="replaceFind">Find &amp; replace</label>
+                                <div class="replace-row">
+                                    <input id="replaceFind" type="text" autocomplete="off" placeholder="find">
+                                    <span aria-hidden="true">→</span>
+                                    <input id="replaceWith" type="text" autocomplete="off" placeholder="replace with">
+                                </div>
+                                <div class="help">Literal text, text columns only.</div>
+                            </div>
+                        </div>
+                    </details>
 
-                <h3 class="section-label">
-                    Preview
-                    <span id="previewCount" class="section-hint"></span>
-                    <span id="previewState" class="preview-state" hidden></span>
-                </h3>
-                <div class="table-wrap table-wrap-tall">
-                    <table class="data" id="previewTable">
-                        <thead><tr></tr></thead>
-                        <tbody></tbody>
-                    </table>
-                </div>
-            </div>
-
-            <div class="card-foot">
-                <span class="dz-sub" id="footSummary">—</span>
-                <div style="display:flex;gap:10px">
-                    <button class="btn btn-ghost" id="resetBtn" type="button">Reset options</button>
-                    <button class="btn btn-primary" id="processBtn" type="button">
-                        Process data &nbsp;→
+                    <button class="btn btn-ghost btn-sm btn-block" id="resetBtn" type="button">
+                        Reset all options
                     </button>
+                </aside>
+
+                <!-- -------------------------------------- live preview -->
+                <div class="workbench-preview">
+                    <div class="preview-bar">
+                        <span class="preview-title">Live preview</span>
+                        <span id="previewCount" class="preview-count"></span>
+                        <span id="previewState" class="preview-state" hidden></span>
+                    </div>
+                    <div class="table-wrap table-wrap-tall">
+                        <table class="data" id="previewTable">
+                            <thead><tr></tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
-        </section>
+        </div>
 
-    </div>
+        <div class="card-foot">
+            <span class="foot-note" id="footSummary">—</span>
+            <button class="btn btn-primary" id="processBtn" type="button">
+                Open the dashboard &nbsp;→
+            </button>
+        </div>
+    </section>
+
 </main>
 
 <script src="{{ url_for('static', filename='js/ui.js') }}?v={{ asset_version('js/ui.js') }}"></script>

@@ -1,33 +1,42 @@
 /* ==========================================================================
-   OnDemandPivot — HSBC-inspired corporate theme
-   Palette: HSBC Red #DB0011 / Black / White / cool greys
-   Type:    Arial, Helvetica, sans-serif (HSBC brand web stack)
+   Client Profitability Analytics — HSBC-inspired design system
+
+   Palette : HSBC Red #DB0011 · Black · White · cool greys
+   Type    : Arial / Helvetica (HSBC brand web stack)
+   Layout  : white header with a red rule, no dark utility bar
    ========================================================================== */
 
 :root {
-    --hsbc-red: #db0011;
-    --hsbc-red-dark: #b5000e;
-    --hsbc-red-tint: #fff1f1;
-    --hsbc-black: #000000;
-    --hsbc-ink: #1a1a1a;
-    --hsbc-grey-800: #333333;
-    --hsbc-grey-600: #666666;
-    --hsbc-grey-400: #999999;
-    --hsbc-grey-300: #c8c8c8;
-    --hsbc-grey-200: #e0e0e0;
-    --hsbc-grey-100: #f2f2f2;
-    --hsbc-grey-050: #f7f7f7;
-    --hsbc-white: #ffffff;
-    --hsbc-green: #00875a;
+    --red: #db0011;
+    --red-dark: #b5000e;
+    --red-tint: #fff2f3;
+    --black: #000000;
+    --ink: #1a1a1a;
+    --grey-800: #333333;
+    --grey-600: #666666;
+    --grey-500: #808080;
+    --grey-400: #999999;
+    --grey-300: #c8c8c8;
+    --grey-200: #e2e2e2;
+    --grey-100: #f2f2f2;
+    --grey-050: #fafafa;
+    --white: #ffffff;
+    --green: #00875a;
+    --amber: #a05a00;
+    --blue: #0b5394;
 
-    --font-stack: Arial, "Helvetica Neue", Helvetica, sans-serif;
-    --radius: 2px;
-    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
-    --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.12);
-    --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.22);
+    --font: Arial, "Helvetica Neue", Helvetica, sans-serif;
+    --mono: "Consolas", "SFMono-Regular", Menlo, monospace;
 
-    --header-h: 64px;
-    --topbar-h: 30px;
+    --radius: 3px;
+    --radius-lg: 6px;
+    --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.06);
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.09);
+    --shadow-md: 0 6px 18px rgba(0, 0, 0, 0.13);
+    --shadow-lg: 0 16px 44px rgba(0, 0, 0, 0.24);
+
+    --header-h: 68px;
+    --bar-h: 54px;
 }
 
 * {
@@ -42,11 +51,11 @@ body {
 }
 
 body {
-    font-family: var(--font-stack);
+    font-family: var(--font);
     font-size: 14px;
     line-height: 1.5;
-    color: var(--hsbc-ink);
-    background: var(--hsbc-grey-100);
+    color: var(--ink);
+    background: var(--grey-100);
     -webkit-font-smoothing: antialiased;
 }
 
@@ -60,7 +69,7 @@ h4 {
 }
 
 a {
-    color: var(--hsbc-red);
+    color: var(--red);
     text-decoration: none;
 }
 
@@ -68,165 +77,142 @@ a:hover {
     text-decoration: underline;
 }
 
-/* --------------------------------------------------------------------------
-   Top utility bar + main header
-   -------------------------------------------------------------------------- */
-
-.topbar {
-    height: var(--topbar-h);
-    background: var(--hsbc-black);
-    color: var(--hsbc-grey-300);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0 24px;
-    font-size: 11px;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
+code {
+    font-family: var(--mono);
+    font-size: 0.92em;
+    background: var(--grey-100);
+    padding: 1px 5px;
+    border-radius: 2px;
 }
 
-.topbar strong {
-    color: var(--hsbc-white);
-    font-weight: 700;
+[hidden] {
+    display: none !important;
 }
 
-.topbar .dot {
-    display: inline-block;
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--hsbc-green);
-    margin-right: 6px;
-    vertical-align: middle;
-}
+/* ==========================================================================
+   Header
+   ========================================================================== */
 
-.app-header {
+.site-header {
     height: var(--header-h);
-    background: var(--hsbc-white);
-    border-bottom: 3px solid var(--hsbc-red);
+    background: var(--white);
+    border-bottom: 3px solid var(--red);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0 24px;
-    position: sticky;
-    top: 0;
-    z-index: 40;
+    gap: 24px;
+    padding: 0 28px;
+    position: relative;
+    z-index: 30;
 }
 
 .brand {
     display: flex;
     align-items: center;
-    gap: 14px;
+    gap: 16px;
+    min-width: 0;
 }
 
-/* Uploaded brand logo (static/icon/LOGO.PNG). */
 .brand-logo {
-    height: 40px;
+    height: 38px;
     width: auto;
-    max-width: 190px;
+    max-width: 220px;
     object-fit: contain;
     display: block;
+    flex: 0 0 auto;
+}
+
+.brand-divider {
+    width: 1px;
+    height: 38px;
+    background: var(--grey-200);
     flex: 0 0 auto;
 }
 
 .brand-text {
     display: flex;
     flex-direction: column;
-    line-height: 1.15;
+    line-height: 1.2;
+    min-width: 0;
 }
 
 .brand-name {
     font-size: 19px;
     font-weight: 700;
-    color: var(--hsbc-black);
+    color: var(--black);
     letter-spacing: -0.02em;
-}
-
-.brand-name span {
-    color: var(--hsbc-red);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .brand-tag {
-    font-size: 10.5px;
-    color: var(--hsbc-grey-600);
-    letter-spacing: 0.14em;
+    font-size: 10px;
+    color: var(--grey-600);
+    letter-spacing: 0.16em;
     text-transform: uppercase;
+    white-space: nowrap;
 }
 
-.header-actions {
+.header-meta {
     display: flex;
-    align-items: center;
-    gap: 12px;
-}
-
-/* Two-line right block: file name + metadata, then the primary action. */
-.header-actions-stacked {
     flex-direction: column;
     align-items: flex-end;
-    gap: 6px;
+    gap: 2px;
+    text-align: right;
+    min-width: 0;
+    flex: 0 1 auto;
 }
 
-.dataset-meta {
+.header-meta-actions {
+    flex-direction: row;
+    align-items: center;
+    gap: 16px;
+}
+
+.meta-block {
     display: flex;
     flex-direction: column;
     align-items: flex-end;
     line-height: 1.25;
-    text-align: right;
-    max-width: 46vw;
+    min-width: 0;
 }
 
-.dataset-file {
+.meta-file {
     font-size: 14px;
     font-weight: 700;
-    color: var(--hsbc-black);
+    color: var(--black);
+    max-width: 40vw;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    max-width: 100%;
 }
 
-.dataset-sub {
+.meta-sub {
     font-size: 11px;
-    color: var(--hsbc-grey-600);
-    letter-spacing: 0.02em;
+    color: var(--grey-600);
     white-space: nowrap;
 }
 
-.dataset-pill {
-    font-size: 12px;
-    color: var(--hsbc-grey-600);
-    background: var(--hsbc-grey-100);
-    border: 1px solid var(--hsbc-grey-200);
-    padding: 6px 12px;
-    border-radius: var(--radius);
-    max-width: 340px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.dataset-pill b {
-    color: var(--hsbc-black);
-}
-
-/* --------------------------------------------------------------------------
-   Buttons
-   -------------------------------------------------------------------------- */
+/* ==========================================================================
+   Buttons, tags, badges
+   ========================================================================== */
 
 .btn {
-    font-family: var(--font-stack);
+    font-family: var(--font);
     font-size: 13px;
     font-weight: 700;
-    padding: 10px 22px;
+    padding: 10px 20px;
     border-radius: var(--radius);
     border: 1px solid transparent;
     cursor: pointer;
-    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
     letter-spacing: 0.02em;
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 8px;
     line-height: 1.2;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
 .btn:disabled {
@@ -235,35 +221,35 @@ a:hover {
 }
 
 .btn-primary {
-    background: var(--hsbc-red);
-    color: var(--hsbc-white);
-    border-color: var(--hsbc-red);
+    background: var(--red);
+    color: var(--white);
+    border-color: var(--red);
 }
 
 .btn-primary:hover:not(:disabled) {
-    background: var(--hsbc-red-dark);
-    border-color: var(--hsbc-red-dark);
+    background: var(--red-dark);
+    border-color: var(--red-dark);
 }
 
 .btn-dark {
-    background: var(--hsbc-black);
-    color: var(--hsbc-white);
-    border-color: var(--hsbc-black);
+    background: var(--black);
+    color: var(--white);
+    border-color: var(--black);
 }
 
 .btn-dark:hover:not(:disabled) {
-    background: var(--hsbc-grey-800);
+    background: var(--grey-800);
 }
 
 .btn-ghost {
-    background: var(--hsbc-white);
-    color: var(--hsbc-black);
-    border-color: var(--hsbc-grey-300);
+    background: var(--white);
+    color: var(--black);
+    border-color: var(--grey-300);
 }
 
 .btn-ghost:hover:not(:disabled) {
-    border-color: var(--hsbc-black);
-    background: var(--hsbc-grey-050);
+    border-color: var(--black);
+    background: var(--grey-050);
 }
 
 .btn-sm {
@@ -273,46 +259,109 @@ a:hover {
 
 .btn-block {
     width: 100%;
-    justify-content: center;
 }
 
-/* --------------------------------------------------------------------------
+.tag {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 4px 9px;
+    border: 1px solid var(--grey-300);
+    color: var(--grey-600);
+    border-radius: 2px;
+    background: var(--grey-050);
+    white-space: nowrap;
+}
+
+.badge {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 2px;
+    border: 1px solid transparent;
+}
+
+.badge-number {
+    background: #eef6ff;
+    color: var(--blue);
+    border-color: #cfe3f7;
+}
+
+.badge-string {
+    background: var(--grey-100);
+    color: var(--grey-800);
+    border-color: var(--grey-200);
+}
+
+.badge-datetime {
+    background: #eefaf3;
+    color: var(--green);
+    border-color: #c8ecd9;
+}
+
+.badge-boolean {
+    background: #fff7e6;
+    color: var(--amber);
+    border-color: #f5e0b3;
+}
+
+.badge-alert {
+    background: var(--red-tint);
+    color: var(--red);
+    border-color: #f6c9cc;
+}
+
+/* ==========================================================================
    Page shell
-   -------------------------------------------------------------------------- */
+   ========================================================================== */
 
 .page {
     width: 100%;
-    max-width: none;
-    margin: 0;
-    padding: 28px 32px 72px;
+    padding: 30px 32px 72px;
 }
 
-.page-intro {
-    margin-bottom: 26px;
+.hero {
+    margin-bottom: 24px;
+    max-width: 820px;
 }
 
-.page-intro h1 {
-    font-size: 30px;
-    margin-bottom: 6px;
+.hero h1 {
+    font-size: 31px;
+    line-height: 1.15;
+    margin-bottom: 8px;
 }
 
-.page-intro h1 em {
+.hero h1 em {
     font-style: normal;
-    color: var(--hsbc-red);
+    color: var(--red);
 }
 
-.page-intro p {
+.hero p {
     margin: 0;
-    color: var(--hsbc-grey-600);
+    color: var(--grey-600);
     font-size: 15px;
-    max-width: 720px;
+}
+
+.stack {
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
 }
 
 .card {
-    background: var(--hsbc-white);
-    border: 1px solid var(--hsbc-grey-200);
-    border-radius: var(--radius);
-    box-shadow: var(--shadow-sm);
+    background: var(--white);
+    border: 1px solid var(--grey-200);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-xs);
+    overflow: hidden;
+}
+
+.card + .card {
+    margin-top: 22px;
 }
 
 .card-head {
@@ -320,14 +369,18 @@ a:hover {
     align-items: center;
     justify-content: space-between;
     gap: 16px;
-    padding: 16px 20px;
-    border-bottom: 1px solid var(--hsbc-grey-200);
+    padding: 15px 22px;
+    border-bottom: 1px solid var(--grey-200);
+    background: var(--white);
 }
 
 .card-head h2 {
-    font-size: 15px;
+    font-size: 14px;
     text-transform: uppercase;
-    letter-spacing: 0.09em;
+    letter-spacing: 0.1em;
+    display: flex;
+    align-items: center;
+    color: var(--black);
 }
 
 .card-head .step {
@@ -336,22 +389,30 @@ a:hover {
     justify-content: center;
     width: 22px;
     height: 22px;
-    background: var(--hsbc-red);
-    color: var(--hsbc-white);
+    background: var(--red);
+    color: var(--white);
     font-size: 12px;
     font-weight: 700;
     border-radius: 50%;
-    margin-right: 10px;
+    margin-right: 11px;
+    flex: 0 0 auto;
+}
+
+.head-tags {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    flex-wrap: wrap;
 }
 
 .card-body {
-    padding: 20px;
+    padding: 22px;
 }
 
 .card-foot {
-    padding: 16px 20px;
-    border-top: 1px solid var(--hsbc-grey-200);
-    background: var(--hsbc-grey-050);
+    padding: 15px 22px;
+    border-top: 1px solid var(--grey-200);
+    background: var(--grey-050);
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -359,21 +420,20 @@ a:hover {
     flex-wrap: wrap;
 }
 
-.stack {
-    display: flex;
-    flex-direction: column;
-    gap: 24px;
+.foot-note {
+    font-size: 13px;
+    color: var(--grey-600);
 }
 
-/* --------------------------------------------------------------------------
-   Drag & drop zone
-   -------------------------------------------------------------------------- */
+/* ==========================================================================
+   Drop zone
+   ========================================================================== */
 
 .dropzone {
-    border: 2px dashed var(--hsbc-grey-300);
-    background: var(--hsbc-white);
-    border-radius: var(--radius);
-    padding: 54px 28px;
+    border: 2px dashed var(--grey-300);
+    background: var(--grey-050);
+    border-radius: var(--radius-lg);
+    padding: 52px 28px;
     text-align: center;
     cursor: pointer;
     transition: border-color 0.15s ease, background 0.15s ease;
@@ -381,8 +441,8 @@ a:hover {
 
 .dropzone:hover,
 .dropzone.is-over {
-    border-color: var(--hsbc-red);
-    background: var(--hsbc-red-tint);
+    border-color: var(--red);
+    background: var(--red-tint);
 }
 
 .dropzone.is-over .dz-icon {
@@ -394,8 +454,9 @@ a:hover {
     height: 54px;
     margin: 0 auto 16px;
     border-radius: 50%;
-    background: var(--hsbc-red-tint);
-    color: var(--hsbc-red);
+    background: var(--white);
+    border: 1px solid var(--grey-200);
+    color: var(--red);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -404,221 +465,482 @@ a:hover {
 }
 
 .dz-title {
-    font-size: 18px;
+    font-size: 19px;
     font-weight: 700;
-    margin-bottom: 6px;
+    margin-bottom: 5px;
 }
 
 .dz-sub {
-    color: var(--hsbc-grey-600);
+    color: var(--grey-600);
     font-size: 13px;
 }
 
 .dz-sub b {
-    color: var(--hsbc-red);
+    color: var(--red);
     text-decoration: underline;
-}
-
-.dz-formats {
-    margin-top: 18px;
-    display: flex;
-    gap: 8px;
-    justify-content: center;
-}
-
-.tag {
-    font-size: 10.5px;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    padding: 4px 10px;
-    border: 1px solid var(--hsbc-grey-300);
-    color: var(--hsbc-grey-600);
-    border-radius: var(--radius);
-    background: var(--hsbc-grey-050);
 }
 
 .file-input {
     display: none;
 }
 
-/* --------------------------------------------------------------------------
+.file-meta {
+    margin: 14px 0 0;
+    font-size: 13px;
+    color: var(--grey-600);
+}
+
+.file-meta b {
+    color: var(--black);
+}
+
+/* ==========================================================================
    Stat tiles
-   -------------------------------------------------------------------------- */
+   ========================================================================== */
 
 .stat-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(168px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
     gap: 14px;
 }
 
 .stat {
-    background: var(--hsbc-white);
-    border: 1px solid var(--hsbc-grey-200);
-    border-left: 4px solid var(--hsbc-black);
+    background: var(--white);
+    border: 1px solid var(--grey-200);
+    border-left: 4px solid var(--black);
     border-radius: var(--radius);
     padding: 14px 16px;
 }
 
 .stat.alert {
-    border-left-color: var(--hsbc-red);
+    border-left-color: var(--red);
 }
 
 .stat-label {
-    font-size: 10.5px;
+    font-size: 10px;
     text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: var(--hsbc-grey-600);
+    letter-spacing: 0.11em;
+    color: var(--grey-600);
     margin-bottom: 6px;
 }
 
 .stat-value {
     font-size: 25px;
     font-weight: 700;
-    color: var(--hsbc-black);
+    color: var(--black);
     line-height: 1.1;
+    word-break: break-word;
 }
 
 .stat.alert .stat-value {
-    color: var(--hsbc-red);
+    color: var(--red);
 }
 
 .stat-hint {
     font-size: 11.5px;
-    color: var(--hsbc-grey-400);
+    color: var(--grey-400);
     margin-top: 3px;
 }
 
-/* --------------------------------------------------------------------------
-   Tables (profile + preview)
-   -------------------------------------------------------------------------- */
+.stat-grid-tight {
+    grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+    gap: 10px;
+}
+
+.stat-grid-tight .stat {
+    padding: 10px 12px;
+    border-left-width: 3px;
+}
+
+.stat-grid-tight .stat-value {
+    font-size: 18px;
+}
+
+.stat-grid-tight .stat-label {
+    font-size: 9.5px;
+    margin-bottom: 4px;
+}
+
+.stat-grid-tight .stat-hint {
+    font-size: 10.5px;
+}
+
+/* ==========================================================================
+   Tables
+   ========================================================================== */
 
 .table-wrap {
     overflow: auto;
-    max-height: 340px;
-    border: 1px solid var(--hsbc-grey-200);
+    max-height: 360px;
+    border: 1px solid var(--grey-200);
+    border-radius: var(--radius);
 }
 
 .table-wrap-tall {
-    max-height: min(62vh, 640px);
+    max-height: none;
+    height: 100%;
 }
 
-.section-label {
-    font-size: 11px;
+table.data {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12.5px;
+    white-space: nowrap;
+}
+
+table.data thead th {
+    position: sticky;
+    top: 0;
+    background: var(--black);
+    color: var(--white);
+    text-align: left;
+    font-weight: 700;
+    font-size: 10.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 9px 12px;
+    z-index: 2;
+    border-right: 1px solid var(--grey-800);
+}
+
+table.data tbody td {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--grey-200);
+    border-right: 1px solid var(--grey-100);
+    color: var(--ink);
+}
+
+table.data tbody tr:nth-child(even) {
+    background: var(--grey-050);
+}
+
+table.data tbody tr:hover {
+    background: var(--red-tint);
+}
+
+table.data td.num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+table.data td.null {
+    color: var(--grey-400);
+    font-style: italic;
+}
+
+/* ==========================================================================
+   Fields and controls
+   ========================================================================== */
+
+.field {
+    margin-bottom: 14px;
+}
+
+.field:last-child {
+    margin-bottom: 0;
+}
+
+.field > label {
+    display: block;
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: var(--grey-600);
+    margin-bottom: 6px;
+}
+
+.field > label .tag {
+    margin-left: 6px;
+    vertical-align: middle;
+}
+
+.field input[type="number"],
+.field input[type="text"],
+.field input[type="password"],
+.field select {
+    width: 100%;
+    font-family: var(--font);
+    font-size: 13.5px;
+    padding: 9px 11px;
+    border: 1px solid var(--grey-300);
+    border-radius: var(--radius);
+    background: var(--white);
+    color: var(--black);
+}
+
+.field select {
+    appearance: none;
+    background-image: linear-gradient(45deg, transparent 50%, var(--grey-600) 50%),
+        linear-gradient(135deg, var(--grey-600) 50%, transparent 50%);
+    background-position: calc(100% - 16px) 50%, calc(100% - 11px) 50%;
+    background-size: 5px 5px, 5px 5px;
+    background-repeat: no-repeat;
+    padding-right: 30px;
+}
+
+.field input:focus,
+.field select:focus {
+    outline: none;
+    border-color: var(--red);
+    box-shadow: 0 0 0 2px rgba(219, 0, 17, 0.14);
+}
+
+.field .help {
+    font-size: 11.5px;
+    color: var(--grey-400);
+    margin-top: 5px;
+    line-height: 1.45;
+}
+
+.field-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.checks {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    margin-bottom: 14px;
+}
+
+.check {
+    display: flex;
+    align-items: flex-start;
+    gap: 9px;
+    font-size: 13px;
+    color: var(--ink);
+    cursor: pointer;
+    line-height: 1.35;
+}
+
+.check input {
+    margin: 2px 0 0;
+    accent-color: var(--red);
+    width: 15px;
+    height: 15px;
+    flex: 0 0 auto;
+}
+
+.check .help {
+    display: block;
+    font-size: 11.5px;
+    color: var(--grey-400);
+    margin-top: 2px;
+}
+
+.check-inline {
+    margin-top: 8px;
+}
+
+.replace-row {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+}
+
+.replace-row span {
+    color: var(--grey-400);
+    font-weight: 700;
+    flex: 0 0 auto;
+}
+
+/* ==========================================================================
+   Collapsible option groups
+   ========================================================================== */
+
+.opt-group {
+    border-bottom: 1px solid var(--grey-200);
+    padding: 0;
+}
+
+.opt-group:last-of-type {
+    border-bottom: none;
+}
+
+.opt-group > summary {
+    list-style: none;
+    cursor: pointer;
+    user-select: none;
+    padding: 13px 2px;
+    font-size: 11.5px;
+    font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.1em;
-    color: var(--hsbc-grey-600);
-    margin: 22px 0 10px;
-    padding-bottom: 7px;
-    border-bottom: 1px solid var(--hsbc-grey-200);
+    color: var(--black);
     display: flex;
     align-items: baseline;
-    gap: 10px;
+    gap: 9px;
+    flex-wrap: wrap;
+}
+
+.opt-group > summary::-webkit-details-marker {
+    display: none;
+}
+
+.opt-group > summary::before {
+    content: "▸";
+    color: var(--red);
+    font-size: 12px;
+    transition: transform 0.15s ease;
+    flex: 0 0 auto;
+}
+
+.opt-group[open] > summary::before {
+    transform: rotate(90deg);
+}
+
+.opt-group > summary:hover {
+    color: var(--red);
+}
+
+.opt-group > *:not(summary) {
+    margin-bottom: 14px;
+}
+
+.opt-group > *:last-child {
+    margin-bottom: 18px;
 }
 
 .section-hint {
     font-size: 10.5px;
     font-weight: 400;
     text-transform: none;
-    letter-spacing: 0.02em;
-    color: var(--hsbc-grey-400);
+    letter-spacing: 0.01em;
+    color: var(--grey-400);
 }
 
-.preview-state {
-    margin-left: auto;
-    font-size: 10.5px;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    padding: 2px 8px;
-    border-radius: 10px;
-    background: var(--hsbc-grey-100);
-    color: var(--hsbc-grey-600);
+/* ==========================================================================
+   Workbench (controls + live preview)
+   ========================================================================== */
+
+.workbench {
+    display: grid;
+    grid-template-columns: minmax(300px, 400px) minmax(0, 1fr);
+    gap: 22px;
+    align-items: stretch;
 }
 
-.preview-state.is-busy {
-    background: #fff7e6;
-    color: #a05a00;
+.workbench-controls {
+    position: sticky;
+    top: 16px;
+    max-height: calc(100vh - 32px);
+    overflow-y: auto;
+    border: 1px solid var(--grey-200);
+    border-radius: var(--radius);
+    padding: 4px 16px 16px;
+    background: var(--white);
+    scrollbar-width: thin;
 }
 
-.preview-state.is-ok {
-    background: #eefaf3;
-    color: var(--hsbc-green);
+.workbench-controls::-webkit-scrollbar {
+    width: 8px;
 }
 
-.preview-state.is-bad {
-    background: var(--hsbc-red-tint);
-    color: var(--hsbc-red);
+.workbench-controls::-webkit-scrollbar-thumb {
+    background: var(--grey-300);
+    border-radius: 4px;
 }
 
-/* ---------------------------------------------------------- option groups */
-
-.opt-group {
-    border-top: 1px solid var(--hsbc-grey-200);
-    padding-top: 4px;
-    margin-top: 18px;
+.workbench-controls .btn-block {
+    margin-top: 14px;
 }
 
-.opt-group:first-child {
-    border-top: none;
-    margin-top: 0;
+.workbench-preview {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    border: 1px solid var(--grey-200);
+    border-radius: var(--radius);
+    overflow: hidden;
+    background: var(--white);
 }
 
-.opt-group > .section-label {
-    margin-top: 12px;
+.preview-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--grey-200);
+    background: var(--grey-050);
+    flex-wrap: wrap;
 }
 
-details.opt-group > summary {
-    list-style: none;
-    cursor: pointer;
-    user-select: none;
+.preview-title {
     font-size: 11px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.1em;
-    color: var(--hsbc-grey-600);
-    margin: 12px 0 0;
-    padding-bottom: 7px;
-    border-bottom: 1px solid var(--hsbc-grey-200);
-    display: flex;
-    align-items: baseline;
-    gap: 10px;
+    color: var(--black);
 }
 
-details.opt-group > summary::-webkit-details-marker {
-    display: none;
+.preview-count {
+    font-size: 11.5px;
+    color: var(--grey-600);
 }
 
-details.opt-group > summary::before {
-    content: "▸";
-    color: var(--hsbc-red);
-    transition: transform 0.15s ease;
+.preview-state {
+    margin-left: auto;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 3px 9px;
+    border-radius: 10px;
+    background: var(--grey-100);
+    color: var(--grey-600);
 }
 
-details.opt-group[open] > summary::before {
-    transform: rotate(90deg);
+.preview-state.is-busy {
+    background: #fff7e6;
+    color: var(--amber);
 }
 
-details.opt-group > summary:hover {
-    color: var(--hsbc-black);
+.preview-state.is-ok {
+    background: #eefaf3;
+    color: var(--green);
 }
 
-details.opt-group[open] > summary {
-    margin-bottom: 12px;
+.preview-state.is-bad {
+    background: var(--red-tint);
+    color: var(--red);
 }
 
-.replace-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
+.workbench-preview .table-wrap {
+    border: none;
+    border-radius: 0;
+    flex: 1 1 auto;
+    min-height: 320px;
+    max-height: none;
 }
 
-.replace-row span {
-    color: var(--hsbc-grey-400);
+/* ==========================================================================
+   Notices
+   ========================================================================== */
+
+.notice {
+    padding: 11px 16px;
+    font-size: 13px;
+    border-left: 4px solid var(--grey-400);
+    background: var(--grey-100);
+}
+
+.notice-error {
+    background: var(--red-tint);
+    border-left-color: var(--red);
+    color: var(--red-dark);
     font-weight: 700;
 }
 
-/* ------------------------------------------------------------------ toasts */
+.page-dashboard > #loadError {
+    margin: 12px 22px 0;
+}
+
+/* ==========================================================================
+   Toasts
+   ========================================================================== */
 
 .toast-host {
     position: fixed;
@@ -637,15 +959,15 @@ details.opt-group[open] > summary {
     display: flex;
     align-items: flex-start;
     gap: 10px;
-    background: var(--hsbc-white);
-    border: 1px solid var(--hsbc-grey-200);
-    border-left: 4px solid var(--hsbc-grey-400);
+    background: var(--white);
+    border: 1px solid var(--grey-200);
+    border-left: 4px solid var(--grey-400);
     box-shadow: var(--shadow-md);
     border-radius: var(--radius);
     padding: 11px 12px;
     font-size: 13px;
     line-height: 1.45;
-    color: var(--hsbc-ink);
+    color: var(--ink);
     animation: toast-in 0.18s ease-out;
 }
 
@@ -676,8 +998,8 @@ details.opt-group[open] > summary {
     justify-content: center;
     font-size: 12px;
     font-weight: 700;
-    color: var(--hsbc-white);
-    background: var(--hsbc-grey-600);
+    color: var(--white);
+    background: var(--grey-600);
     margin-top: 1px;
 }
 
@@ -690,7 +1012,7 @@ details.opt-group[open] > summary {
     flex: 0 0 auto;
     background: transparent;
     border: none;
-    color: var(--hsbc-grey-400);
+    color: var(--grey-400);
     font-size: 17px;
     line-height: 1;
     cursor: pointer;
@@ -698,283 +1020,55 @@ details.opt-group[open] > summary {
 }
 
 .toast-close:hover {
-    color: var(--hsbc-black);
+    color: var(--black);
 }
 
 .toast-error {
-    border-left-color: var(--hsbc-red);
+    border-left-color: var(--red);
     background: #fffafa;
 }
 
 .toast-error .toast-icon {
-    background: var(--hsbc-red);
+    background: var(--red);
 }
 
 .toast-success {
-    border-left-color: var(--hsbc-green);
+    border-left-color: var(--green);
 }
 
 .toast-success .toast-icon {
-    background: var(--hsbc-green);
+    background: var(--green);
 }
 
 .toast-warn {
-    border-left-color: #a05a00;
+    border-left-color: var(--amber);
 }
 
 .toast-warn .toast-icon {
-    background: #a05a00;
+    background: var(--amber);
 }
 
 .toast-info {
-    border-left-color: #0b5394;
+    border-left-color: var(--blue);
 }
 
 .toast-info .toast-icon {
-    background: #0b5394;
-}
-
-table.data {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 12.5px;
-    white-space: nowrap;
-}
-
-table.data thead th {
-    position: sticky;
-    top: 0;
-    background: var(--hsbc-black);
-    color: var(--hsbc-white);
-    text-align: left;
-    font-weight: 700;
-    font-size: 11px;
-    letter-spacing: 0.07em;
-    text-transform: uppercase;
-    padding: 9px 12px;
-    z-index: 2;
-    border-right: 1px solid var(--hsbc-grey-800);
-}
-
-table.data tbody td {
-    padding: 8px 12px;
-    border-bottom: 1px solid var(--hsbc-grey-200);
-    border-right: 1px solid var(--hsbc-grey-100);
-    color: var(--hsbc-ink);
-}
-
-table.data tbody tr:nth-child(even) {
-    background: var(--hsbc-grey-050);
-}
-
-table.data tbody tr:hover {
-    background: var(--hsbc-red-tint);
-}
-
-table.data td.num {
-    text-align: right;
-    font-variant-numeric: tabular-nums;
-}
-
-table.data td.null {
-    color: var(--hsbc-grey-400);
-    font-style: italic;
-}
-
-.badge {
-    display: inline-block;
-    font-size: 10.5px;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    padding: 3px 8px;
-    border-radius: var(--radius);
-    border: 1px solid transparent;
-}
-
-.badge-number {
-    background: #eef6ff;
-    color: #0b5394;
-    border-color: #cfe3f7;
-}
-
-.badge-string {
-    background: var(--hsbc-grey-100);
-    color: var(--hsbc-grey-800);
-    border-color: var(--hsbc-grey-200);
-}
-
-.badge-datetime {
-    background: #eefaf3;
-    color: var(--hsbc-green);
-    border-color: #c8ecd9;
-}
-
-.badge-boolean {
-    background: #fff7e6;
-    color: #a05a00;
-    border-color: #f5e0b3;
-}
-
-.badge-alert {
-    background: var(--hsbc-red-tint);
-    color: var(--hsbc-red);
-    border-color: #f6c9cc;
-}
-
-/* --------------------------------------------------------------------------
-   Restructure controls
-   -------------------------------------------------------------------------- */
-
-.controls-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 20px;
-    align-items: start;
-}
-
-/* Direct child only: checkbox rows (.check) are <label>s too and must keep
-   their normal sentence case. */
-.field > label {
-    display: block;
-    font-size: 11px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.09em;
-    color: var(--hsbc-grey-600);
-    margin-bottom: 7px;
-}
-
-.field > label .tag {
-    margin-left: 6px;
-    vertical-align: middle;
-}
-
-.field input[type="number"],
-.field input[type="text"],
-.field select {
-    width: 100%;
-    font-family: var(--font-stack);
-    font-size: 14px;
-    padding: 10px 12px;
-    border: 1px solid var(--hsbc-grey-300);
-    border-radius: var(--radius);
-    background: var(--hsbc-white);
-    color: var(--hsbc-black);
-}
-
-.field input:focus,
-.field select:focus {
-    outline: none;
-    border-color: var(--hsbc-red);
-    box-shadow: 0 0 0 2px rgba(219, 0, 17, 0.15);
-}
-
-.field .help {
-    font-size: 11.5px;
-    color: var(--hsbc-grey-400);
-    margin-top: 6px;
-}
-
-.field label .tag {
-    margin-left: 6px;
-    vertical-align: middle;
-}
-
-/* Range input spans the whole control grid — it overrides the others. */
-.field-range {
-    grid-column: 1 / -1;
-}
-
-.field-range input {
-    font-family: "Consolas", "SFMono-Regular", Menlo, monospace;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    border-color: var(--hsbc-black);
-}
-
-.field-range input::placeholder {
-    text-transform: none;
-    letter-spacing: normal;
-    color: var(--hsbc-grey-400);
-}
-
-.checks {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    padding-top: 4px;
-}
-
-.check {
-    display: flex;
-    align-items: flex-start;
-    gap: 9px;
-    font-size: 13px;
-    color: var(--hsbc-ink);
-    cursor: pointer;
-}
-
-.check input {
-    margin: 2px 0 0;
-    accent-color: var(--hsbc-red);
-    width: 15px;
-    height: 15px;
-}
-
-.check .help {
-    display: block;
-    font-size: 11.5px;
-    color: var(--hsbc-grey-400);
-}
-
-/* --------------------------------------------------------------------------
-   Notices
-   -------------------------------------------------------------------------- */
-
-.notice {
-    padding: 11px 14px;
-    border-radius: var(--radius);
-    font-size: 13px;
-    border-left: 4px solid var(--hsbc-grey-400);
-    background: var(--hsbc-grey-100);
-}
-
-.notice-error {
-    background: var(--hsbc-red-tint);
-    border-left-color: var(--hsbc-red);
-    color: var(--hsbc-red-dark);
-    font-weight: 700;
-}
-
-.notice-info {
-    background: #eef6ff;
-    border-left-color: #0b5394;
-    color: #0b5394;
-}
-
-.notice-success {
-    background: #eefaf3;
-    border-left-color: var(--hsbc-green);
-    color: var(--hsbc-green);
-}
-
-[hidden] {
-    display: none !important;
+    background: var(--blue);
 }
 
 .spinner {
     width: 15px;
     height: 15px;
     border: 2px solid rgba(255, 255, 255, 0.4);
-    border-top-color: var(--hsbc-white);
+    border-top-color: var(--white);
     border-radius: 50%;
     animation: spin 0.7s linear infinite;
+    display: inline-block;
 }
 
 .btn-ghost .spinner {
-    border-color: var(--hsbc-grey-300);
-    border-top-color: var(--hsbc-black);
+    border-color: var(--grey-300);
+    border-top-color: var(--black);
 }
 
 @keyframes spin {
@@ -984,11 +1078,9 @@ table.data td.null {
 }
 
 /* ==========================================================================
-   Dashboard
+   Dashboard shell
    ========================================================================== */
 
-/* The dashboard owns the whole viewport: header stays put, the grid below
-   fills the remaining height and scrolls internally instead of the page. */
 body.page-dashboard {
     height: 100vh;
     overflow: hidden;
@@ -996,36 +1088,104 @@ body.page-dashboard {
     flex-direction: column;
 }
 
-body.page-dashboard .topbar,
-body.page-dashboard .app-header {
+body.page-dashboard .site-header {
     flex: 0 0 auto;
-    position: static;
 }
 
-/* The stacked file-meta block needs a little more room than the upload page. */
-body.page-dashboard .app-header {
-    height: auto;
-    min-height: 76px;
-    padding-top: 10px;
-    padding-bottom: 10px;
+/* ------------------------------------------------------------ command bar */
+
+.command-bar {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 9px 22px;
+    background: var(--white);
+    border-bottom: 1px solid var(--grey-200);
+    flex-wrap: wrap;
+    z-index: 20;
 }
 
-body.page-dashboard #loadError {
-    flex: 0 0 auto;
-    margin: 12px 20px 0;
+.cmd-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
+
+.cmd-group > label {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--grey-600);
+    white-space: nowrap;
+}
+
+.cmd-group select {
+    font-family: var(--font);
+    font-size: 13px;
+    font-weight: 700;
+    padding: 8px 30px 8px 11px;
+    border: 1px solid var(--grey-300);
+    border-radius: var(--radius);
+    background-color: var(--white);
+    color: var(--black);
+    appearance: none;
+    background-image: linear-gradient(45deg, transparent 50%, var(--grey-600) 50%),
+        linear-gradient(135deg, var(--grey-600) 50%, transparent 50%);
+    background-position: calc(100% - 16px) 50%, calc(100% - 11px) 50%;
+    background-size: 5px 5px, 5px 5px;
+    background-repeat: no-repeat;
+    max-width: 240px;
+}
+
+.cmd-group select:focus {
+    outline: none;
+    border-color: var(--red);
+    box-shadow: 0 0 0 2px rgba(219, 0, 17, 0.14);
+}
+
+.cmd-view select {
+    min-width: 168px;
+    border-color: var(--black);
+    border-width: 2px;
+    padding-top: 7px;
+    padding-bottom: 7px;
+}
+
+.cmd-group select option,
+.cmd-group select optgroup {
+    font-weight: 400;
+}
+
+.cmd-group select optgroup {
+    font-weight: 700;
+    color: var(--black);
+}
+
+.cmd-divider {
+    width: 1px;
+    height: 26px;
+    background: var(--grey-200);
+}
+
+.cmd-actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* --------------------------------------------------------------- layout */
 
 .dash-layout {
     flex: 1 1 auto;
     min-height: 0;
     display: grid;
     grid-template-columns: minmax(0, 1fr) 340px;
-    gap: 18px;
-    padding: 16px 20px;
+    gap: 16px;
+    padding: 16px 22px 20px;
     width: 100%;
-    max-width: none;
-    margin: 0;
-    align-items: stretch;
     overflow: hidden;
 }
 
@@ -1034,107 +1194,15 @@ body.page-dashboard #loadError {
     min-height: 0;
     display: flex;
     flex-direction: column;
-    gap: 14px;
     overflow: hidden;
 }
 
-/* Toolbar */
-.toolbar {
-    flex: 0 0 auto;
-    background: var(--hsbc-white);
-    border: 1px solid var(--hsbc-grey-200);
-    border-radius: var(--radius);
-    box-shadow: var(--shadow-sm);
-    padding: 12px 16px;
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    flex-wrap: wrap;
-}
-
-.toolbar-group {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.toolbar-group > label {
-    font-size: 10.5px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.09em;
-    color: var(--hsbc-grey-600);
-}
-
-.toolbar select {
-    font-family: var(--font-stack);
-    font-size: 13px;
-    padding: 7px 10px;
-    border: 1px solid var(--hsbc-grey-300);
-    border-radius: var(--radius);
-    background: var(--hsbc-white);
-    max-width: 210px;
-}
-
-.toolbar select:focus {
-    outline: none;
-    border-color: var(--hsbc-red);
-}
-
-.toolbar-divider {
-    width: 1px;
-    height: 26px;
-    background: var(--hsbc-grey-200);
-}
-
-.toolbar-end {
-    margin-left: auto;
-}
-
-/* View switcher */
-.view-switch {
-    display: flex;
-    gap: 0;
-    border: 1px solid var(--hsbc-grey-300);
-    border-radius: var(--radius);
-    overflow: hidden;
-}
-
-.view-btn {
-    font-family: var(--font-stack);
-    font-size: 12px;
-    font-weight: 700;
-    padding: 7px 15px;
-    background: var(--hsbc-white);
-    color: var(--hsbc-grey-600);
-    border: none;
-    border-right: 1px solid var(--hsbc-grey-300);
-    cursor: pointer;
-    transition: background 0.12s ease, color 0.12s ease;
-}
-
-.view-btn:last-child {
-    border-right: none;
-}
-
-.view-btn:hover {
-    background: var(--hsbc-grey-100);
-    color: var(--hsbc-black);
-}
-
-.view-btn.is-active {
-    background: var(--hsbc-red);
-    color: var(--hsbc-white);
-}
-
-/* Viewer shell */
 .viewer-shell {
-    background: var(--hsbc-white);
-    border: 1px solid var(--hsbc-grey-200);
-    border-radius: var(--radius);
-    box-shadow: var(--shadow-sm);
+    background: var(--white);
+    border: 1px solid var(--grey-200);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-xs);
     overflow: hidden;
-    position: relative;
     flex: 1 1 auto;
     min-height: 0;
     display: flex;
@@ -1142,21 +1210,29 @@ body.page-dashboard #loadError {
 }
 
 .viewer-caption {
+    flex: 0 0 auto;
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 16px;
     padding: 10px 16px;
-    border-bottom: 1px solid var(--hsbc-grey-200);
+    border-bottom: 1px solid var(--grey-200);
     font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.09em;
-    color: var(--hsbc-grey-600);
-    background: var(--hsbc-grey-050);
-    flex: 0 0 auto;
+    letter-spacing: 0.04em;
+    color: var(--grey-600);
+    background: var(--grey-050);
 }
 
 .viewer-caption b {
-    color: var(--hsbc-black);
+    color: var(--black);
+}
+
+#viewerStatus {
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: var(--black);
+    white-space: nowrap;
 }
 
 perspective-viewer {
@@ -1164,18 +1240,16 @@ perspective-viewer {
     width: 100%;
     flex: 1 1 auto;
     min-height: 0;
-    font-family: var(--font-stack);
+    font-family: var(--font);
     color-scheme: light;
-}
 
-/* HSBC branding inside Perspective.
-   NOTE: pro.css only defines the d3fc chart variables under
-   `perspective-viewer[theme="Pro Light"]`, and the viewer does not keep that
-   attribute — so the variables never resolve and every d3fc chart crashes with
-   "Cannot read properties of null (reading 'opacity')". We therefore define the
-   full d3fc palette here. Custom properties inherit into the viewer's shadow
-   DOM, so the chart canvases pick these up. */
-perspective-viewer {
+    /* HSBC branding inside Perspective.
+       NOTE: pro.css only defines the d3fc chart variables under
+       `perspective-viewer[theme="Pro Light"]`, and the viewer does not keep
+       that attribute — so the variables never resolve and every d3fc chart
+       crashes with "Cannot read properties of null (reading 'opacity')".
+       Custom properties inherit into the viewer's shadow DOM, so defining the
+       full palette here is both the theme and the fix. */
     --plugin--background: #ffffff;
     --active--color: #db0011;
     --inactive--color: #999999;
@@ -1184,15 +1258,18 @@ perspective-viewer {
     --rt-neg-cell--color: #db0011;
     --block--background: #ffffff;
     --header--background: #f2f2f2;
+    --toolbar--background: #ffffff;
 
-    /* d3fc chart palette. */
     --d3fc-series: rgba(219, 0, 17, 0.8);
     --d3fc-series-1: #db0011;
     --d3fc-series-2: #1a1a1a;
     --d3fc-series-3: #666666;
     --d3fc-series-4: #b5000e;
     --d3fc-series-5: #333333;
-    --d3fc-gridline--color: #e0e0e0;
+    --d3fc-series-6: #999999;
+    --d3fc-series-7: #808080;
+    --d3fc-series-8: #c8c8c8;
+    --d3fc-gridline--color: #e2e2e2;
     --d3fc-axis-ticks--color: #333333;
     --d3fc-axis--lines: #c8c8c8;
     --d3fc-legend--background: #ffffff;
@@ -1203,54 +1280,35 @@ perspective-viewer {
     --d3fc-negative--gradient: linear-gradient(#ffffff 0%, #db0011 100%);
 }
 
-perspective-viewer::part(plugin_selector),
-perspective-viewer {
-    --toolbar--background: #ffffff;
-}
-
-/* --------------------------------------------------------------------------
-   KPI side panel
-   -------------------------------------------------------------------------- */
+/* ------------------------------------------------------------ side panel */
 
 .side-panel {
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: 16px;
     min-height: 0;
     overflow-y: auto;
     padding-right: 4px;
 }
 
+.side-panel .card + .card {
+    margin-top: 0;
+}
+
+.side-panel .card-head {
+    padding: 12px 16px;
+}
+
 .side-panel .card-head h2 {
-    font-size: 13px;
+    font-size: 12px;
 }
 
-/* Dataset summary: denser tiles so the extra measures fit the side panel. */
-.stat-grid-tight {
-    grid-template-columns: repeat(auto-fit, minmax(126px, 1fr));
-    gap: 10px;
-}
-
-.stat-grid-tight .stat {
-    padding: 10px 12px;
-    border-left-width: 3px;
-}
-
-.stat-grid-tight .stat-value {
-    font-size: 19px;
-}
-
-.stat-grid-tight .stat-label {
-    font-size: 10px;
-    margin-bottom: 4px;
-}
-
-.stat-grid-tight .stat-hint {
-    font-size: 10.5px;
+.side-panel .card-body {
+    padding: 14px 16px;
 }
 
 .kpi-list {
-    max-height: 40vh;
+    max-height: 34vh;
     overflow-y: auto;
     padding: 8px;
     display: flex;
@@ -1259,27 +1317,27 @@ perspective-viewer {
 }
 
 .kpi-item {
-    border: 1px solid var(--hsbc-grey-200);
-    border-left: 3px solid var(--hsbc-grey-300);
-    background: var(--hsbc-white);
+    border: 1px solid var(--grey-200);
+    border-left: 3px solid var(--grey-300);
+    background: var(--white);
     border-radius: var(--radius);
-    padding: 10px 12px;
+    padding: 9px 11px;
     cursor: pointer;
     transition: border-color 0.12s ease, background 0.12s ease;
 }
 
 .kpi-item:hover {
-    background: var(--hsbc-grey-050);
-    border-left-color: var(--hsbc-black);
+    background: var(--grey-050);
+    border-left-color: var(--black);
 }
 
 .kpi-item.is-selected {
-    border-left-color: var(--hsbc-red);
-    background: var(--hsbc-red-tint);
+    border-left-color: var(--red);
+    background: var(--red-tint);
 }
 
 .kpi-item.has-issue {
-    border-left-color: var(--hsbc-red);
+    border-left-color: var(--red);
 }
 
 .kpi-top {
@@ -1287,13 +1345,13 @@ perspective-viewer {
     align-items: center;
     justify-content: space-between;
     gap: 8px;
-    margin-bottom: 5px;
+    margin-bottom: 4px;
 }
 
 .kpi-name {
-    font-size: 13px;
+    font-size: 12.5px;
     font-weight: 700;
-    color: var(--hsbc-black);
+    color: var(--black);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -1302,24 +1360,24 @@ perspective-viewer {
 .kpi-meta {
     display: flex;
     gap: 10px;
-    font-size: 11px;
-    color: var(--hsbc-grey-600);
+    font-size: 10.5px;
+    color: var(--grey-600);
     flex-wrap: wrap;
 }
 
 .kpi-meta b {
-    color: var(--hsbc-ink);
+    color: var(--ink);
 }
 
 .kpi-meta .warn {
-    color: var(--hsbc-red);
+    color: var(--red);
     font-weight: 700;
 }
 
 .kpi-detail {
-    padding: 14px 16px;
-    border-top: 1px solid var(--hsbc-grey-200);
-    background: var(--hsbc-grey-050);
+    padding: 13px 16px;
+    border-top: 1px solid var(--grey-200);
+    background: var(--grey-050);
     font-size: 12.5px;
 }
 
@@ -1331,8 +1389,8 @@ perspective-viewer {
 }
 
 .kpi-detail dt {
-    color: var(--hsbc-grey-600);
-    font-size: 11px;
+    color: var(--grey-600);
+    font-size: 10.5px;
     text-transform: uppercase;
     letter-spacing: 0.06em;
     align-self: center;
@@ -1341,7 +1399,7 @@ perspective-viewer {
 .kpi-detail dd {
     margin: 0;
     font-weight: 700;
-    color: var(--hsbc-black);
+    color: var(--black);
     text-align: right;
     word-break: break-word;
 }
@@ -1356,9 +1414,9 @@ perspective-viewer {
 }
 
 .issue-list li {
-    background: var(--hsbc-red-tint);
-    color: var(--hsbc-red-dark);
-    border-left: 3px solid var(--hsbc-red);
+    background: var(--red-tint);
+    color: var(--red-dark);
+    border-left: 3px solid var(--red);
     padding: 5px 9px;
     font-size: 11.5px;
     font-weight: 700;
@@ -1366,32 +1424,32 @@ perspective-viewer {
 
 .issue-list li.ok {
     background: #eefaf3;
-    color: var(--hsbc-green);
-    border-left-color: var(--hsbc-green);
+    color: var(--green);
+    border-left-color: var(--green);
 }
 
 .panel-empty {
-    padding: 22px 16px;
+    padding: 20px 16px;
     text-align: center;
-    color: var(--hsbc-grey-400);
+    color: var(--grey-400);
     font-size: 12.5px;
 }
 
-/* --------------------------------------------------------------------------
+/* ==========================================================================
    AI chat
-   -------------------------------------------------------------------------- */
+   ========================================================================== */
 
 .chat-fab {
     position: fixed;
     right: 26px;
     bottom: 26px;
     z-index: 60;
-    background: var(--hsbc-black);
-    color: var(--hsbc-white);
+    background: var(--black);
+    color: var(--white);
     border: none;
     border-radius: 40px;
     padding: 13px 22px;
-    font-family: var(--font-stack);
+    font-family: var(--font);
     font-size: 13.5px;
     font-weight: 700;
     cursor: pointer;
@@ -1403,17 +1461,17 @@ perspective-viewer {
 }
 
 .chat-fab:hover {
-    background: var(--hsbc-red);
+    background: var(--red);
     transform: translateY(-2px);
 }
 
 .chat-fab .spark {
-    color: var(--hsbc-red);
+    color: var(--red);
     font-size: 15px;
 }
 
 .chat-fab:hover .spark {
-    color: var(--hsbc-white);
+    color: var(--white);
 }
 
 .chat-panel {
@@ -1426,22 +1484,23 @@ perspective-viewer {
     height: auto;
     min-height: 380px;
     max-height: calc(100vh - 64px);
-    background: var(--hsbc-white);
-    border-radius: 4px;
+    background: var(--white);
+    border-radius: var(--radius-lg);
     box-shadow: var(--shadow-lg);
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    border-top: 4px solid var(--hsbc-red);
+    border-top: 4px solid var(--red);
 }
 
 .chat-head {
-    background: var(--hsbc-black);
-    color: var(--hsbc-white);
+    background: var(--black);
+    color: var(--white);
     padding: 13px 16px;
     display: flex;
     align-items: center;
     justify-content: space-between;
+    flex: 0 0 auto;
 }
 
 .chat-head-title {
@@ -1456,7 +1515,7 @@ perspective-viewer {
 
 .chat-head-title span {
     font-size: 10.5px;
-    color: var(--hsbc-grey-400);
+    color: var(--grey-400);
     text-transform: uppercase;
     letter-spacing: 0.1em;
 }
@@ -1464,7 +1523,7 @@ perspective-viewer {
 .chat-close {
     background: transparent;
     border: none;
-    color: var(--hsbc-white);
+    color: var(--white);
     font-size: 21px;
     line-height: 1;
     cursor: pointer;
@@ -1474,13 +1533,12 @@ perspective-viewer {
 
 .chat-close:hover {
     opacity: 1;
-    color: var(--hsbc-red);
+    color: var(--red);
 }
 
-/* BYO-model connection block ------------------------------------------- */
 .chat-config {
-    border-bottom: 1px solid var(--hsbc-grey-200);
-    background: var(--hsbc-white);
+    border-bottom: 1px solid var(--grey-200);
+    background: var(--white);
     flex: 0 0 auto;
 }
 
@@ -1492,7 +1550,7 @@ perspective-viewer {
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.09em;
-    color: var(--hsbc-grey-600);
+    color: var(--grey-600);
     display: flex;
     align-items: center;
     gap: 7px;
@@ -1504,12 +1562,12 @@ perspective-viewer {
 }
 
 .chat-config > summary:hover {
-    color: var(--hsbc-black);
+    color: var(--black);
 }
 
 .chat-config > summary::before {
     content: "▸";
-    color: var(--hsbc-red);
+    color: var(--red);
     transition: transform 0.15s ease;
 }
 
@@ -1526,7 +1584,11 @@ perspective-viewer {
     overflow-y: auto;
 }
 
-.chat-config-body .field label {
+.chat-config-body .field {
+    margin-bottom: 0;
+}
+
+.chat-config-body .field > label {
     font-size: 10.5px;
     margin-bottom: 5px;
 }
@@ -1538,12 +1600,9 @@ perspective-viewer {
 
 .chat-config-body .help {
     margin-top: 4px;
-    line-height: 1.4;
 }
 
 .chat-config-body code {
-    background: var(--hsbc-grey-100);
-    padding: 1px 4px;
     font-size: 11px;
 }
 
@@ -1557,7 +1616,7 @@ perspective-viewer {
     min-height: 70px;
     overflow-y: auto;
     padding: 16px;
-    background: var(--hsbc-grey-050);
+    background: var(--grey-050);
     display: flex;
     flex-direction: column;
     gap: 11px;
@@ -1566,7 +1625,7 @@ perspective-viewer {
 .msg {
     max-width: 86%;
     padding: 9px 13px;
-    border-radius: 4px;
+    border-radius: var(--radius);
     font-size: 13px;
     line-height: 1.5;
     white-space: pre-wrap;
@@ -1575,95 +1634,103 @@ perspective-viewer {
 
 .msg-user {
     align-self: flex-end;
-    background: var(--hsbc-black);
-    color: var(--hsbc-white);
+    background: var(--black);
+    color: var(--white);
     border-bottom-right-radius: 0;
 }
 
 .msg-bot {
     align-self: flex-start;
-    background: var(--hsbc-white);
-    border: 1px solid var(--hsbc-grey-200);
-    border-left: 3px solid var(--hsbc-red);
-    color: var(--hsbc-ink);
+    background: var(--white);
+    border: 1px solid var(--grey-200);
+    border-left: 3px solid var(--red);
+    color: var(--ink);
     border-bottom-left-radius: 0;
 }
 
 .msg-typing {
     align-self: flex-start;
-    color: var(--hsbc-grey-400);
+    color: var(--grey-400);
     font-size: 12px;
     font-style: italic;
     padding: 4px 6px;
 }
 
 .chat-foot {
-    border-top: 1px solid var(--hsbc-grey-200);
+    border-top: 1px solid var(--grey-200);
     padding: 11px;
     display: flex;
     gap: 8px;
-    background: var(--hsbc-white);
+    background: var(--white);
+    flex: 0 0 auto;
 }
 
 .chat-foot input {
     flex: 1;
-    font-family: var(--font-stack);
+    font-family: var(--font);
     font-size: 13.5px;
     padding: 10px 12px;
-    border: 1px solid var(--hsbc-grey-300);
+    border: 1px solid var(--grey-300);
     border-radius: var(--radius);
 }
 
 .chat-foot input:focus {
     outline: none;
-    border-color: var(--hsbc-red);
+    border-color: var(--red);
     box-shadow: 0 0 0 2px rgba(219, 0, 17, 0.15);
 }
 
 .chat-send {
-    background: var(--hsbc-red);
-    color: var(--hsbc-white);
+    background: var(--red);
+    color: var(--white);
     border: none;
     border-radius: var(--radius);
     padding: 0 17px;
-    font-family: var(--font-stack);
+    font-family: var(--font);
     font-weight: 700;
     font-size: 13px;
     cursor: pointer;
 }
 
 .chat-send:hover {
-    background: var(--hsbc-red-dark);
+    background: var(--red-dark);
 }
 
 .chat-hint {
     font-size: 11px;
-    color: var(--hsbc-grey-400);
+    color: var(--grey-400);
     padding: 0 13px 10px;
-    background: var(--hsbc-white);
+    background: var(--white);
+    flex: 0 0 auto;
 }
 
-/* --------------------------------------------------------------------------
+/* ==========================================================================
    Responsive
-   -------------------------------------------------------------------------- */
+   ========================================================================== */
 
-@media (max-width: 1080px) {
+@media (max-width: 1180px) {
+    .workbench {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .workbench-controls {
+        position: static;
+        max-height: none;
+        overflow: visible;
+    }
+
+    .dash-layout {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
     body.page-dashboard {
         height: auto;
         overflow: auto;
     }
 
-    .dash-layout {
-        grid-template-columns: minmax(0, 1fr);
-        overflow: visible;
-    }
-
+    .dash-layout,
     .dash-main {
         overflow: visible;
-    }
-
-    .viewer-shell {
-        min-height: 520px;
     }
 
     .side-panel {
@@ -1671,33 +1738,75 @@ perspective-viewer {
         padding-right: 0;
     }
 
+    .viewer-shell {
+        min-height: 540px;
+    }
+
     .kpi-list {
-        max-height: 320px;
+        max-height: 300px;
     }
 }
 
-@media (max-width: 720px) {
-    .page {
-        padding: 22px 14px 60px;
+@media (max-width: 760px) {
+    .site-header {
+        padding: 0 16px;
+        gap: 12px;
     }
 
-    .dash-layout {
-        padding: 14px 14px 96px;
-    }
-
-    .page-intro h1 {
-        font-size: 23px;
-    }
-
-    .brand-tag {
+    .brand-tag,
+    .brand-divider {
         display: none;
     }
 
+    .brand-name {
+        font-size: 16px;
+    }
+
     .brand-logo {
-        height: 32px;
+        height: 30px;
+    }
+
+    .meta-file {
+        max-width: 32vw;
+        font-size: 12px;
+    }
+
+    .page {
+        padding: 20px 16px 56px;
+    }
+
+    .hero h1 {
+        font-size: 23px;
+    }
+
+    .card-body {
+        padding: 16px;
+    }
+
+    .field-row {
+        grid-template-columns: 1fr;
+    }
+
+    .command-bar {
+        padding: 9px 14px;
+    }
+
+    .cmd-view select,
+    .cmd-group select {
+        min-width: 0;
+        max-width: 46vw;
+    }
+
+    .cmd-actions {
+        margin-left: 0;
+        width: 100%;
+    }
+
+    .dash-layout {
+        padding: 12px 14px 16px;
     }
 
     .viewer-shell {
-        min-height: 440px;
+        min-height: 420px;
     }
 }

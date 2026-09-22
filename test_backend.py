@@ -1,4 +1,4 @@
-"""Backend tests against the user's Sample Finance Data.xlsx + range/skip-cols/chat."""
+"""Backend tests: sample workbook, ranges, restructuring, sheets, chat, export."""
 import io
 import os
 import sys
@@ -7,14 +7,19 @@ import app as m
 import pyarrow as pa
 
 client = m.app.test_client()
-SAMPLE = os.path.join("static", "Sample Finance Data.xlsx")
+FIXTURES = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        "tests", "fixtures")
+SAMPLE = os.path.join(FIXTURES, "Sample Finance Data.xlsx")
+XLSB = os.path.join(FIXTURES, "sample.xlsb")
 csv_bytes = open(SAMPLE, "rb").read()
 
 
-def up(name="Sample Finance Data.xlsx", data=None):
+def up(name="Sample Finance Data.xlsx", data=None, path=None):
+    if data is None:
+        data = open(path, "rb").read() if path else csv_bytes
     r = client.post(
         "/upload",
-        data={"file": (io.BytesIO(data if data is not None else csv_bytes), name)},
+        data={"file": (io.BytesIO(data), name)},
         content_type="multipart/form-data",
     )
     return r, r.get_json()
@@ -150,8 +155,11 @@ html = r.data.decode()
 print("  upload page ->", r.status_code, len(html), "bytes")
 print("  title present:", "Client Profitability Analytics" in html)
 print("  logo referenced:", "icon/LOGO.PNG" in html)
-print("  tab logo referenced:", "icon/Tab Logo.png" in html)
+print("  square favicon referenced:", "icon/favicon.png" in html)
 print("  cache-busted assets:", "?v=" in html)
+print("  no dark utility bar:", 'class="topbar"' not in html)
+print("  no sample-data button:", 'id="sampleBtn"' not in html)
+print("  accepts xlsb:", ".xlsb" in html)
 
 # --- 7. open-ended Excel ranges ---------------------------------------------
 print("\nopen-ended ranges:")
@@ -254,5 +262,61 @@ frame = pd.read_excel(io.BytesIO(r.data))
 print("  workbook shape:", frame.shape)
 assert frame.shape == (700, 16), frame.shape
 assert client.post("/api/export/xlsx", data=b"").status_code == 400
+
+# --- 11. .xlsb upload and worksheet selection -------------------------------
+if os.path.exists(XLSB):
+    print("\nxlsb + worksheet selection:")
+    r, j = up("sample.xlsb", path=XLSB)
+    print("  xlsb upload ->", r.status_code, "success=", j.get("success"))
+    assert r.status_code == 200 and j["success"], j
+    print("  sheets:", j["sheets"], "| chosen:", j["options"]["sheet"])
+    assert j["sheets"], "expected at least one worksheet"
+    assert j["options"]["sheet"] == j["sheets"][0]
+    print("  shape:", j["profile"]["rows"], "x", j["profile"]["cols"])
+
+    r = client.post("/preview", json={"sheet": j["sheets"][0]})
+    assert r.status_code == 200, r.get_json()
+    print("  explicit sheet ->", r.get_json()["profile"]["rows"], "rows")
+
+    r = client.post("/preview", json={"sheet": "No Such Sheet"})
+    assert r.status_code == 200, r.get_json()
+    print("  unknown sheet falls back to the first one ->",
+          r.get_json()["profile"]["rows"], "rows")
+
+    # CSV uploads report no worksheets.
+    r, j = up("tiny.csv", data=b"a,b\n1,2\n3,4\n")
+    print("  csv sheets:", j["sheets"], "| shape:", j["profile"]["rows"], "x",
+          j["profile"]["cols"])
+    assert j["sheets"] == []
+
+    # Back to the main sample for the remaining checks.
+    up()
+else:
+    print("\n(skipping .xlsb checks - fixture not found)")
+
+# --- 11b. multi-sheet workbook ----------------------------------------------
+MULTI = os.path.join(FIXTURES, "multi-sheet.xlsx")
+if os.path.exists(MULTI):
+    print("\nmulti-sheet workbook:")
+    r, j = up("multi-sheet.xlsx", path=MULTI)
+    assert r.status_code == 200 and j["success"], j
+    print("  sheets:", j["sheets"], "| default:", j["options"]["sheet"])
+    assert j["sheets"] == ["Summary", "Detail"], j["sheets"]
+    assert j["options"]["sheet"] == "Summary"
+    print("  Summary ->", j["profile"]["rows"], "x", j["profile"]["cols"],
+          [f["name"] for f in j["profile"]["fields"]])
+
+    r = client.post("/preview", json={"sheet": "Detail"})
+    detail = r.get_json()
+    assert r.status_code == 200, detail
+    print("  Detail  ->", detail["profile"]["rows"], "x", detail["profile"]["cols"],
+          [f["name"] for f in detail["profile"]["fields"]])
+    assert [f["name"] for f in detail["profile"]["fields"]] == ["Item", "Qty"]
+    up()
+
+# --- 12. unsupported extensions are refused ---------------------------------
+r, j = up("notes.txt", data=b"x")
+print("\ntxt upload ->", r.status_code, j.get("error"))
+assert r.status_code == 400
 
 print("\nALL BACKEND TESTS PASSED")

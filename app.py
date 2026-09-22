@@ -49,9 +49,12 @@ HOST = "127.0.0.1"
 DEFAULT_PORT = 5000
 APP_NAME = "Client Profitability Analytics"
 
-ALLOWED_EXTENSIONS = {".csv", ".xlsx"}
+ALLOWED_EXTENSIONS = {".csv", ".xlsx", ".xlsb"}
+# Excel formats we can open, and the pandas engine each one needs.
+EXCEL_ENGINES = {".xlsx": "openpyxl", ".xlsb": "pyxlsb"}
 UPLOAD_DIR = os.path.join(tempfile.gettempdir(), "ondemandpivot")
 PREVIEW_ROWS = 100
+PREVIEW_COLS = 60  # display cap only; the dashboard always gets every column
 
 app = Flask(
     __name__,
@@ -85,6 +88,7 @@ SESSION_DATA = {
     "processed_df": None,  # final frame handed to Perspective
     "options": {},         # last-applied restructuring options
     "profile": None,       # column summary: dtypes, missing values, anomalies
+    "sheets": [],          # worksheet names when the upload is Excel
 }
 
 
@@ -303,12 +307,25 @@ def _read_csv_tolerant(
     )
 
 
+def _list_sheets(path: str) -> list:
+    """Sheet names for an Excel upload (empty list for CSV)."""
+    engine = EXCEL_ENGINES.get(os.path.splitext(path)[1].lower())
+    if not engine:
+        return []
+    try:
+        with pd.ExcelFile(path, engine=engine) as book:
+            return [str(name) for name in book.sheet_names]
+    except Exception:  # noqa: BLE001 - a broken workbook surfaces on read
+        return []
+
+
 def _read_file(
     path: str,
     skip_rows: int = 0,
     skip_cols: int = 0,
     data_range: str = "",
     has_header: bool = True,
+    sheet: str = "",
 ) -> pd.DataFrame:
     """
     Parse the stored upload.
@@ -319,6 +336,7 @@ def _read_file(
       skip_rows   rows to drop above the header (only if no range given)
       skip_cols   columns to drop from the left of whatever was read
       has_header  when False the first row is data and columns are auto-named
+      sheet       which worksheet to read (.xlsx / .xlsb); '' = first sheet
     """
     skip_rows = max(0, int(skip_rows or 0))
     skip_cols = max(0, int(skip_cols or 0))
@@ -338,14 +356,18 @@ def _read_file(
 
     ext = os.path.splitext(path)[1].lower()
 
-    if ext == ".xlsx":
-        df = pd.read_excel(
-            path,
-            skiprows=skip_rows,
-            nrows=nrows,
-            header=0 if has_header else None,
-            engine="openpyxl",
-        )
+    if ext in EXCEL_ENGINES:
+        with pd.ExcelFile(path, engine=EXCEL_ENGINES[ext]) as book:
+            names = [str(n) for n in book.sheet_names]
+            if not names:
+                raise ValueError("The workbook has no worksheets.")
+            target = sheet if sheet in names else names[0]
+            df = book.parse(
+                target,
+                skiprows=skip_rows,
+                nrows=nrows,
+                header=0 if has_header else None,
+            )
     elif ext == ".csv":
         try:
             df = pd.read_csv(
@@ -394,6 +416,7 @@ DEFAULT_OPTIONS = {
     "skip_last_rows": 0,
     "skip_last_cols": 0,
     "data_range": "",
+    "sheet": "",
     "has_header": True,
     "promote_first_row": False,
     "transpose": False,
@@ -956,21 +979,35 @@ def _build_profile(df: pd.DataFrame, filename: str | None = None) -> dict:
     }
 
 
-def _df_preview(df: pd.DataFrame, n: int = PREVIEW_ROWS) -> dict:
-    """First N rows as JSON-safe records for the preview table."""
+def _df_preview(
+    df: pd.DataFrame, n: int = PREVIEW_ROWS, max_cols: int = PREVIEW_COLS
+) -> dict:
+    """
+    First N rows as JSON-safe records for the preview table.
+
+    Wide frames (a transposed sheet can carry hundreds of columns) are trimmed
+    for display only - the full frame still feeds the dashboard - because
+    building tens of thousands of DOM cells makes the page feel stuck.
+    """
+    total_cols = int(df.shape[1])
     head = df.head(n)
+    if total_cols > max_cols:
+        head = head.iloc[:, :max_cols]
+
     records = json.loads(
         head.to_json(orient="records", date_format="iso", date_unit="ms")
     )
     fields = [
         {"name": str(col), "kind": _column_kind(df[col])}
-        for col in df.columns
+        for col in head.columns
     ]
     return {
         "fields": fields,
         "records": records,
         "shown": len(records),
         "total": int(len(df)),
+        "cols_shown": int(head.shape[1]),
+        "cols_total": total_cols,
     }
 
 
@@ -1059,6 +1096,7 @@ _BOOL_OPTIONS = (
 )
 _TEXT_OPTIONS = (
     "data_range",
+    "sheet",
     "drop_cols",
     "sort_by",
     "text_case",
@@ -1128,6 +1166,7 @@ def _rebuild(options: dict) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
         skip_cols=options.get("skip_cols", 0),
         data_range=options.get("data_range", ""),
         has_header=options.get("has_header", True),
+        sheet=options.get("sheet", ""),
     )
     cleaned = _apply_options(raw.copy(), options)
     cleaned = _infer_excel_serial_dates(cleaned)
@@ -1163,7 +1202,7 @@ def upload():
 
     ext = os.path.splitext(file.filename)[1].lower()
     if ext not in ALLOWED_EXTENSIONS:
-        return _err("Only .csv and .xlsx files are supported.")
+        return _err("Only .csv, .xlsx and .xlsb files are supported.")
 
     display_name = os.path.basename(file.filename)
     filename = secure_filename(file.filename) or f"upload{ext}"
@@ -1174,6 +1213,9 @@ def upload():
     file.save(path)
 
     options = dict(DEFAULT_OPTIONS)
+    sheets = _list_sheets(path)
+    if sheets:
+        options["sheet"] = sheets[0]
     # _rebuild() reads from SESSION_DATA["path"], so register the new file
     # first; a parse failure clears it again below.
     SESSION_DATA.update(
@@ -1181,6 +1223,7 @@ def upload():
             "path": path,
             "filename": filename,
             "display_name": display_name,
+            "sheets": sheets,
             "raw_df": None,
             "df": None,
             "processed_df": None,
@@ -1201,6 +1244,7 @@ def upload():
                 "df": None,
                 "processed_df": None,
                 "profile": None,
+                "sheets": [],
             }
         )
         return _err(f"Could not parse file: {exc}", status=422)
@@ -1225,6 +1269,7 @@ def upload():
             "profile": profile,
             "preview": _df_preview(cleaned),
             "options": options,
+            "sheets": SESSION_DATA.get("sheets") or [],
         }
     )
 
@@ -1259,6 +1304,7 @@ def preview():
             "profile": profile,
             "preview": _df_preview(cleaned),
             "options": options,
+            "sheets": SESSION_DATA.get("sheets") or [],
         }
     )
 

@@ -1,4 +1,4 @@
-/* OnDemandPivot — upload page: drag & drop, profiling, preview, processing. */
+/* Client Profitability Analytics — import page: drop, profile, restructure. */
 (function () {
     "use strict";
 
@@ -32,16 +32,17 @@
                          "optStrip", "optDropRows", "optDropRowsNull", "optDedupe",
                          "optDropCols", "optConstantCols", "optDuplicateCols",
                          "optNormalizeCols", "optCoerceNumbers", "sortDesc"];
-    const SELECT_FIELDS = ["textCase", "fillMissing", "dedupeKeep", "sortBy"];
+    const SELECT_FIELDS = ["sheetSelect", "textCase", "fillMissing", "dedupeKeep", "sortBy"];
     const TEXT_FIELDS = ["dataRange", "dropCols", "replaceFind", "replaceWith"];
 
-    /* id -> backend option name */
+    /* control id -> backend option name */
     const OPTION_MAP = {
         skipRows: "skip_rows",
         skipCols: "skip_cols",
         skipLastRows: "skip_last_rows",
         skipLastCols: "skip_last_cols",
         dataRange: "data_range",
+        sheetSelect: "sheet",
         optHasHeader: "has_header",
         optPromote: "promote_first_row",
         optTranspose: "transpose",
@@ -93,12 +94,36 @@
             const value = opts[OPTION_MAP[id]];
             if (el.type === "checkbox") {
                 el.checked = value !== undefined ? Boolean(value) : el.defaultChecked;
-            } else if (value !== undefined && value !== null) {
+            } else if (value !== undefined && value !== null && value !== "") {
                 el.value = value;
+            } else if (el.tagName === "SELECT" && el.options.length) {
+                // Never leave a select blank: fall back to its first choice.
+                el.selectedIndex = 0;
             } else {
                 el.value = el.defaultValue;
             }
         });
+    }
+
+    /** Populate the worksheet picker; hide it entirely for CSV uploads. */
+    function renderSheets(sheets, chosen) {
+        const field = $("sheetField");
+        const select = $("sheetSelect");
+        const list = Array.isArray(sheets) ? sheets : [];
+
+        if (list.length <= 1) {
+            field.hidden = true;
+            select.innerHTML = list.length
+                ? `<option value="${escapeHtml(list[0])}">${escapeHtml(list[0])}</option>`
+                : "";
+            return;
+        }
+
+        field.hidden = false;
+        select.innerHTML = list
+            .map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`)
+            .join("");
+        if (chosen && list.includes(chosen)) select.value = chosen;
     }
 
     async function postJSON(url, payload) {
@@ -216,7 +241,7 @@
             .join("");
 
         if (!preview.records.length) {
-            tbody.innerHTML = `<tr><td class="null" colspan="${preview.fields.length || 1}">No rows to display — every row was filtered out. Relax the row options.</td></tr>`;
+            tbody.innerHTML = `<tr><td class="null" colspan="${preview.fields.length || 1}">No rows left — every row was filtered out. Relax the row options or the range.</td></tr>`;
         } else {
             tbody.innerHTML = preview.records
                 .map((row) => {
@@ -238,11 +263,16 @@
                 .join("");
         }
 
+        const colNote =
+            preview.cols_total && preview.cols_shown < preview.cols_total
+                ? ` · first ${preview.cols_shown} of ${preview.cols_total} columns`
+                : "";
         $("previewCount").textContent =
-            `— showing ${preview.shown} of ${preview.total} rows`;
-        $("previewTag").textContent = `${preview.total} rows × ${preview.fields.length} cols`;
+            `showing ${preview.shown} of ${preview.total} rows${colNote}`;
+        $("previewTag").textContent =
+            `${preview.total} rows × ${preview.cols_total || preview.fields.length} cols`;
         $("footSummary").textContent =
-            `${preview.total} rows ready — click “Process data” to open the dashboard.`;
+            `${preview.total} rows × ${preview.fields.length} columns ready to explore.`;
     }
 
     function renderAll(data) {
@@ -257,7 +287,7 @@
 
     function setNavMeta(name, text) {
         $("navFile").textContent = name || "No dataset loaded";
-        $("navMeta").textContent = text || "";
+        $("navMeta").textContent = text || "Import & structure";
     }
 
     async function uploadBlob(blob, name) {
@@ -273,14 +303,20 @@
         if (!resp.ok || !data.success) {
             throw new Error(data.error || "Upload failed.");
         }
-        // Each new file starts from the server's default restructuring state.
+
+        renderSheets(data.sheets, data.options && data.options.sheet);
         applyOptions(data.options);
         renderAll(data);
+
         const shown = (data.profile && data.profile.filename) || name;
+        const sheetNote =
+            data.sheets && data.sheets.length > 1
+                ? ` · ${data.sheets.length} sheets`
+                : "";
         setNavMeta(
             shown,
             `${data.profile.rows} rows × ${data.profile.cols} cols · ` +
-                `${data.profile.flagged_fields} flagged`
+                `${data.profile.flagged_fields} flagged${sheetNote}`
         );
         toast(
             `Loaded ${shown} — ${data.profile.rows} rows × ` +
@@ -293,8 +329,8 @@
         if (!file) return;
 
         const ext = (file.name.split(".").pop() || "").toLowerCase();
-        if (ext !== "csv" && ext !== "xlsx") {
-            toast("Unsupported file type. Please choose a .csv or .xlsx file.", "error");
+        if (ext !== "csv" && ext !== "xlsx" && ext !== "xlsb") {
+            toast("Unsupported file type. Choose a .csv, .xlsx or .xlsb file.", "error");
             return;
         }
 
@@ -302,36 +338,6 @@
             await uploadBlob(file, file.name);
         } catch (err) {
             toast(err.message, "error");
-        }
-    }
-
-    /* Bundled demo workbook, so the app can be tried without a local file. */
-    async function loadSample() {
-        const btn = $("sampleBtn");
-        if (btn.disabled) return;
-        btn.disabled = true;
-        const label = btn.innerHTML;
-        btn.innerHTML = '<span class="spinner"></span> Loading…';
-
-        const name = "Sample Finance Data.xlsx";
-        try {
-            const resp = await fetch(
-                "/static/" + encodeURIComponent(name),
-                { cache: "no-store" }
-            );
-            if (!resp.ok) {
-                throw new Error(
-                    "Sample file is not available next to the app " +
-                        "(static/Sample Finance Data.xlsx)."
-                );
-            }
-            const blob = await resp.blob();
-            await uploadBlob(blob, name);
-        } catch (err) {
-            toast(err.message, "error");
-        } finally {
-            btn.disabled = false;
-            btn.innerHTML = label;
         }
     }
 
@@ -415,8 +421,6 @@
         $(id).addEventListener("change", schedulePreview)
     );
 
-    $("sampleBtn").addEventListener("click", loadSample);
-
     $("resetBtn").addEventListener("click", () => {
         applyOptions(null);
         clearTimeout(previewTimer);
@@ -430,7 +434,7 @@
         busy = true;
         const label = btn.innerHTML;
         btn.disabled = true;
-        btn.innerHTML = '<span class="spinner"></span> Processing…';
+        btn.innerHTML = '<span class="spinner"></span> Preparing…';
         try {
             const data = await postJSON("/process", readOptions());
             window.location.href = data.url || "/dashboard";
