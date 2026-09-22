@@ -116,7 +116,7 @@ assert "timestamp" in str(tbl.schema.field(di).type), tbl.schema.field(di).type
 r = client.post("/api/chat", json={"query": "hi"})
 j = r.get_json()
 print("\nchat no creds ->", r.status_code, j)
-assert j.get("placeholder") and "You asked: hi" in j["reply"]
+assert j.get("placeholder") and "No model is connected" in j["reply"]
 
 for payload in [
     {"query": "", "endpoint": "x", "api_key": "y"},
@@ -318,5 +318,18 @@ if os.path.exists(MULTI):
 r, j = up("notes.txt", data=b"x")
 print("\ntxt upload ->", r.status_code, j.get("error"))
 assert r.status_code == 400
+
+# --- 13. clearing the session ------------------------------------------------
+print("\nreset session:")
+up()
+assert client.post("/preview", json={}).status_code == 200
+r = client.post("/api/reset")
+print("  reset ->", r.status_code, r.get_json())
+assert r.status_code == 200 and r.get_json()["success"]
+print("  preview after reset ->", client.post("/preview", json={}).status_code)
+assert client.post("/preview", json={}).status_code == 404
+assert client.get("/api/kpis").status_code == 404
+print("  dashboard falls back to the import page ->",
+      client.get("/dashboard").status_code)
 
 print("\nALL BACKEND TESTS PASSED")

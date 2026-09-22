@@ -85,5 +85,35 @@
         setTimeout(() => el.remove(), 180);
     }
 
-    window.CPA = { toast, escapeHtml, dismiss };
+    /**
+     * Wire every `.group-toggle` button to the panel named in its
+     * aria-controls attribute. Collapsing sections are plain buttons so they
+     * can be styled, animated and keyboard-driven like any other control.
+     */
+    function initCollapsibles(root) {
+        const scope = root || document;
+        scope.querySelectorAll(".group-toggle").forEach((btn) => {
+            if (btn.dataset.bound === "1") return;
+            btn.dataset.bound = "1";
+
+            const panel = document.getElementById(
+                btn.getAttribute("aria-controls") || ""
+            );
+            if (!panel) return;
+
+            const setOpen = (open) => {
+                btn.setAttribute("aria-expanded", open ? "true" : "false");
+                panel.hidden = !open;
+            };
+
+            // Honour the markup's initial state.
+            setOpen(btn.getAttribute("aria-expanded") !== "false");
+
+            btn.addEventListener("click", () => {
+                setOpen(btn.getAttribute("aria-expanded") !== "true");
+            });
+        });
+    }
+
+    window.CPA = { toast, escapeHtml, dismiss, initCollapsibles };
 })();

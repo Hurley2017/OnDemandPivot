@@ -1274,6 +1274,25 @@ def upload():
     )
 
 
+@app.route("/api/reset", methods=["POST"])
+def api_reset():
+    """Forget the uploaded file (used by the import page's Clear button)."""
+    SESSION_DATA.update(
+        {
+            "path": None,
+            "filename": None,
+            "display_name": None,
+            "raw_df": None,
+            "df": None,
+            "processed_df": None,
+            "options": {},
+            "profile": None,
+            "sheets": [],
+        }
+    )
+    return jsonify({"success": True})
+
+
 @app.route("/preview", methods=["POST"])
 def preview():
     """
@@ -1563,7 +1582,10 @@ def api_chat():
             {
                 "success": True,
                 "placeholder": True,
-                "reply": f"AI model integration pending. You asked: {query}",
+                "reply": (
+                    "No model is connected. Open “Connect your own model”, "
+                    "add an endpoint and API key, then ask again."
+                ),
             }
         )
 

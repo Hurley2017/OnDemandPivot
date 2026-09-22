@@ -285,16 +285,37 @@
 
     /* --------------------------------------------------------- upload flow */
 
-    function setNavMeta(name, text) {
+    function setNavMeta(name, text, size) {
         $("navFile").textContent = name || "No dataset loaded";
         $("navMeta").textContent = text || "Import & structure";
+        $("fileTag").textContent = name
+            ? name + (size ? ` · ${size}` : "")
+            : "No file selected";
+    }
+
+    function showClear(on) {
+        $("clearFileBtn").hidden = !on;
+    }
+
+    /** Drop the selected file and everything derived from it. */
+    async function clearFile() {
+        try {
+            await postJSON("/api/reset", {});
+        } catch (_err) {
+            /* the local UI is cleared either way */
+        }
+        profileCard.hidden = true;
+        previewCard.hidden = true;
+        fileInput.value = "";
+        applyOptions(null);
+        showClear(false);
+        setNavMeta(null, null);
+        clearTimeout(previewTimer);
+        previewSeq += 1; // abandon any preview still in flight
+        toast("File cleared. Choose another one to continue.", "info");
     }
 
     async function uploadBlob(blob, name) {
-        $("fileMeta").hidden = false;
-        $("fileMeta").innerHTML =
-            `Selected: <b>${escapeHtml(name)}</b> · ${(blob.size / 1024).toFixed(1)} KB`;
-
         const form = new FormData();
         form.append("file", blob, name);
 
@@ -307,6 +328,7 @@
         renderSheets(data.sheets, data.options && data.options.sheet);
         applyOptions(data.options);
         renderAll(data);
+        showClear(true);
 
         const shown = (data.profile && data.profile.filename) || name;
         const sheetNote =
@@ -316,7 +338,8 @@
         setNavMeta(
             shown,
             `${data.profile.rows} rows × ${data.profile.cols} cols · ` +
-                `${data.profile.flagged_fields} flagged${sheetNote}`
+                `${data.profile.flagged_fields} flagged${sheetNote}`,
+            `${(blob.size / 1024).toFixed(1)} KB`
         );
         toast(
             `Loaded ${shown} — ${data.profile.rows} rows × ` +
@@ -410,6 +433,8 @@
         fileInput.value = "";
     });
 
+    window.CPA.initCollapsibles();
+
     // Re-profile on any control change. Both `input` and `change` are wired so
     // typing, spinners, paste and programmatic edits all refresh the preview.
     NUMBER_FIELDS.concat(TEXT_FIELDS).forEach((id) =>
@@ -420,6 +445,11 @@
     BOOL_FIELDS.concat(SELECT_FIELDS).forEach((id) =>
         $(id).addEventListener("change", schedulePreview)
     );
+
+    $("clearFileBtn").addEventListener("click", (e) => {
+        e.stopPropagation(); // the drop zone behind it opens the file picker
+        clearFile();
+    });
 
     $("resetBtn").addEventListener("click", () => {
         applyOptions(null);

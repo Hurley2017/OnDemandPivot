@@ -32,6 +32,7 @@
             <span class="brand-tag">On Device Self-Service Workbench</span>
         </div>
     </div>
+
     <div class="header-meta header-meta-actions">
         <div class="meta-block">
             <span class="meta-file" id="navFile" title="{{ filename }}">{{ filename }}</span>
@@ -39,6 +40,12 @@
                 {{ rows }} rows × {{ cols }} cols · {{ flagged }} flagged
             </span>
         </div>
+        <button class="btn btn-ai" id="chatToggle" type="button"
+                aria-controls="chatDock" aria-expanded="false">
+            <span class="spark" aria-hidden="true">◆</span>
+            <span>AI Data Assistant</span>
+            <span class="ai-state" id="aiState">No model</span>
+        </button>
         <a class="btn btn-primary btn-sm" href="/">New Dataset</a>
     </div>
 </header>
@@ -83,7 +90,7 @@
     </div>
 </div>
 
-<main class="dash-layout">
+<main class="dash-layout" id="dashLayout">
 
     <!-- ============================ VIEWER ============================= -->
     <div class="dash-main">
@@ -126,80 +133,83 @@
             </div>
         </section>
     </aside>
+
+    <!-- ============================== AI DOCK =========================== -->
+    <aside class="chat-dock" id="chatDock" hidden aria-label="AI Data Assistant">
+        <div class="chat-head">
+            <div class="chat-head-title">
+                <b>AI Data Assistant</b>
+                <span id="chatMode">No model connected</span>
+            </div>
+            <button class="chat-close" id="chatClose" type="button"
+                    aria-label="Close the assistant">×</button>
+        </div>
+
+        <div class="chat-connection" id="chatConnection">
+            <section class="opt-group">
+                <button class="group-toggle" type="button" aria-expanded="true"
+                        aria-controls="grpConnection">
+                    <span class="chev" aria-hidden="true"></span>
+                    Connect your own model
+                </button>
+                <div class="group-body" id="grpConnection">
+                    <p class="chat-note">
+                        <b>On-device model preferred.</b> Point the endpoint at a
+                        runtime on this machine (for example Ollama at
+                        <code>http://localhost:11434/v1</code>) and your data never
+                        leaves the device.
+                    </p>
+
+                    <div class="field">
+                        <label for="chatEndpoint">Endpoint</label>
+                        <input id="chatEndpoint" type="text" autocomplete="off"
+                               spellcheck="false">
+                        <div class="help">
+                            Base URL or full <code>/chat/completions</code> URL of any
+                            OpenAI-compatible provider.
+                        </div>
+                    </div>
+
+                    <div class="field">
+                        <label for="chatKey">API key</label>
+                        <input id="chatKey" type="password" autocomplete="off"
+                               spellcheck="false">
+                        <div class="help">
+                            Kept in this browser only, and sent over loopback to this
+                            app when you press Send.
+                        </div>
+                    </div>
+
+                    <div class="field">
+                        <label for="chatModel">Model <span class="tag">optional</span></label>
+                        <input id="chatModel" type="text" autocomplete="off"
+                               spellcheck="false">
+                    </div>
+
+                    <div class="chat-config-actions">
+                        <button class="btn btn-primary btn-sm" id="chatSaveCfg" type="button">
+                            Save connection
+                        </button>
+                        <button class="btn btn-ghost btn-sm" id="chatClearCfg" type="button">
+                            Clear
+                        </button>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <div class="chat-status" id="chatStatus">
+            No model connected — add an endpoint and API key above to start asking questions.
+        </div>
+
+        <div class="chat-body" id="chatBody"></div>
+
+        <div class="chat-foot">
+            <input id="chatInput" type="text" autocomplete="off">
+            <button class="chat-send" id="chatSend" type="button">Send</button>
+        </div>
+    </aside>
 </main>
-
-<!-- ============================ AI CHAT ================================== -->
-<button class="chat-fab" id="chatFab" type="button">
-    <span class="spark" aria-hidden="true">◆</span> AI Data Assistant
-</button>
-
-<section class="chat-panel" id="chatPanel" hidden aria-label="AI Data Assistant">
-    <div class="chat-head">
-        <div class="chat-head-title">
-            <b>AI Data Assistant</b>
-            <span id="chatMode">Placeholder replies</span>
-        </div>
-        <button class="chat-close" id="chatClose" type="button"
-                aria-label="Close chat">×</button>
-    </div>
-
-    <details class="chat-config" id="chatConfig">
-        <summary>Connect your own model</summary>
-        <div class="chat-config-body">
-            <div class="field">
-                <label for="chatEndpoint">Endpoint</label>
-                <input id="chatEndpoint" type="text" autocomplete="off"
-                       spellcheck="false" placeholder="https://api.openai.com/v1">
-                <div class="help">
-                    Base URL or full <code>/chat/completions</code> URL of any
-                    OpenAI-compatible provider.
-                </div>
-            </div>
-
-            <div class="field">
-                <label for="chatKey">API key</label>
-                <input id="chatKey" type="password" autocomplete="off"
-                       spellcheck="false" placeholder="sk-…">
-                <div class="help">
-                    Kept in this browser only, and sent over loopback to this app
-                    when you press Send.
-                </div>
-            </div>
-
-            <div class="field">
-                <label for="chatModel">Model <span class="tag">optional</span></label>
-                <input id="chatModel" type="text" autocomplete="off"
-                       spellcheck="false" placeholder="gpt-4o-mini">
-            </div>
-
-            <div class="chat-config-actions">
-                <button class="btn btn-ghost btn-sm" id="chatSaveCfg" type="button">
-                    Save connection
-                </button>
-                <button class="btn btn-ghost btn-sm" id="chatClearCfg" type="button">
-                    Clear
-                </button>
-            </div>
-        </div>
-    </details>
-
-    <div class="chat-body" id="chatBody">
-        <div class="msg msg-bot">
-            Hi! Ask me anything about this dataset. Add your own endpoint and
-            API key above for live replies — without them you get placeholder
-            responses.
-        </div>
-    </div>
-
-    <div class="chat-foot">
-        <input id="chatInput" type="text" autocomplete="off"
-               placeholder="e.g. Which region has the highest sales?">
-        <button class="chat-send" id="chatSend" type="button">Send</button>
-    </div>
-    <div class="chat-hint" id="chatHint">
-        Placeholder mode — add an endpoint and API key for live answers.
-    </div>
-</section>
 
 <script src="{{ url_for('static', filename='js/ui.js') }}?v={{ asset_version('js/ui.js') }}"></script>
 <script type="module"

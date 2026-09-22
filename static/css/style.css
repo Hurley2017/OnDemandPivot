@@ -212,7 +212,25 @@ code {
     justify-content: center;
     gap: 8px;
     line-height: 1.2;
-    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+    position: relative;
+    transition: background 0.16s ease, color 0.16s ease,
+        border-color 0.16s ease, box-shadow 0.18s ease, transform 0.12s ease;
+}
+
+.btn:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(219, 0, 17, 0.28);
+}
+
+.btn:not(:disabled):hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.13);
+}
+
+.btn:not(:disabled):active {
+    transform: translateY(0);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.16);
+    transition-duration: 0.05s;
 }
 
 .btn:disabled {
@@ -259,6 +277,49 @@ code {
 
 .btn-block {
     width: 100%;
+}
+
+/* Header action that opens the assistant. */
+.btn-ai {
+    background: var(--white);
+    color: var(--black);
+    border-color: var(--grey-300);
+    padding: 7px 12px;
+    font-size: 12.5px;
+    gap: 7px;
+}
+
+.btn-ai .spark {
+    color: var(--red);
+    font-size: 13px;
+    transition: transform 0.25s ease;
+}
+
+.btn-ai:hover .spark {
+    transform: rotate(90deg) scale(1.15);
+}
+
+.btn-ai .ai-state {
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 3px 7px;
+    border-radius: 9px;
+    background: var(--grey-100);
+    color: var(--grey-600);
+    border: 1px solid var(--grey-200);
+}
+
+.btn-ai.is-live .ai-state {
+    background: #eefaf3;
+    color: var(--green);
+    border-color: #c8ecd9;
+}
+
+.btn-ai.is-open {
+    border-color: var(--black);
+    background: var(--grey-050);
 }
 
 .tag {
@@ -429,30 +490,39 @@ code {
    Drop zone
    ========================================================================== */
 
+.card-body-tight {
+    padding: 16px 22px;
+}
+
+/* Compact, horizontal drop zone. */
 .dropzone {
-    border: 2px dashed var(--grey-300);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    border: 1.5px dashed var(--grey-300);
     background: var(--grey-050);
     border-radius: var(--radius-lg);
-    padding: 52px 28px;
-    text-align: center;
+    padding: 16px 20px;
     cursor: pointer;
-    transition: border-color 0.15s ease, background 0.15s ease;
+    transition: border-color 0.18s ease, background 0.18s ease,
+        box-shadow 0.18s ease;
 }
 
 .dropzone:hover,
 .dropzone.is-over {
     border-color: var(--red);
     background: var(--red-tint);
+    box-shadow: inset 0 0 0 1px rgba(219, 0, 17, 0.12);
 }
 
 .dropzone.is-over .dz-icon {
-    transform: translateY(-4px);
+    transform: translateY(-3px);
 }
 
 .dz-icon {
-    width: 54px;
-    height: 54px;
-    margin: 0 auto 16px;
+    flex: 0 0 auto;
+    width: 40px;
+    height: 40px;
     border-radius: 50%;
     background: var(--white);
     border: 1px solid var(--grey-200);
@@ -460,19 +530,24 @@ code {
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 24px;
-    transition: transform 0.15s ease;
+    font-size: 18px;
+    transition: transform 0.18s ease;
+}
+
+.dz-copy {
+    flex: 1 1 auto;
+    min-width: 0;
 }
 
 .dz-title {
-    font-size: 19px;
+    font-size: 15px;
     font-weight: 700;
-    margin-bottom: 5px;
+    line-height: 1.3;
 }
 
 .dz-sub {
     color: var(--grey-600);
-    font-size: 13px;
+    font-size: 12.5px;
 }
 
 .dz-sub b {
@@ -480,13 +555,17 @@ code {
     text-decoration: underline;
 }
 
+.dz-clear {
+    flex: 0 0 auto;
+}
+
 .file-input {
     display: none;
 }
 
 .file-meta {
-    margin: 14px 0 0;
-    font-size: 13px;
+    margin: 12px 0 0;
+    font-size: 12.5px;
     color: var(--grey-600);
 }
 
@@ -667,23 +746,37 @@ table.data td.null {
     border-radius: var(--radius);
     background: var(--white);
     color: var(--black);
+    transition: border-color 0.16s ease, box-shadow 0.16s ease,
+        background 0.16s ease;
 }
 
-.field select {
-    appearance: none;
-    background-image: linear-gradient(45deg, transparent 50%, var(--grey-600) 50%),
-        linear-gradient(135deg, var(--grey-600) 50%, transparent 50%);
-    background-position: calc(100% - 16px) 50%, calc(100% - 11px) 50%;
-    background-size: 5px 5px, 5px 5px;
-    background-repeat: no-repeat;
-    padding-right: 30px;
+.field input:hover:not(:focus),
+.field select:hover:not(:focus) {
+    border-color: var(--grey-400);
 }
 
 .field input:focus,
 .field select:focus {
     outline: none;
     border-color: var(--red);
-    box-shadow: 0 0 0 2px rgba(219, 0, 17, 0.14);
+    box-shadow: 0 0 0 3px rgba(219, 0, 17, 0.14);
+}
+
+/* Custom dropdown chrome shared by every select in the app. */
+.field select,
+.cmd-group select {
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23666' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 11px center;
+    padding-right: 30px;
+    cursor: pointer;
+}
+
+.field select:hover,
+.cmd-group select:hover {
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23db0011' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 }
 
 .field .help {
@@ -760,48 +853,67 @@ table.data td.null {
     border-bottom: none;
 }
 
-.opt-group > summary {
-    list-style: none;
+/* Collapsing section header — a real button, so it animates and focuses. */
+.group-toggle {
+    width: 100%;
+    display: flex;
+    align-items: baseline;
+    gap: 9px;
+    flex-wrap: wrap;
+    background: transparent;
+    border: none;
     cursor: pointer;
-    user-select: none;
+    text-align: left;
     padding: 13px 2px;
+    font-family: var(--font);
     font-size: 11.5px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: var(--black);
-    display: flex;
-    align-items: baseline;
-    gap: 9px;
-    flex-wrap: wrap;
+    border-radius: var(--radius);
+    transition: color 0.15s ease, background 0.15s ease;
 }
 
-.opt-group > summary::-webkit-details-marker {
-    display: none;
-}
-
-.opt-group > summary::before {
-    content: "▸";
+.group-toggle:hover {
     color: var(--red);
-    font-size: 12px;
-    transition: transform 0.15s ease;
-    flex: 0 0 auto;
+    background: var(--grey-050);
 }
 
-.opt-group[open] > summary::before {
+.group-toggle:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(219, 0, 17, 0.22);
+}
+
+.group-toggle .chev {
+    flex: 0 0 auto;
+    width: 0;
+    height: 0;
+    border-top: 4.5px solid transparent;
+    border-bottom: 4.5px solid transparent;
+    border-left: 6px solid var(--red);
+    transform-origin: 35% 50%;
+    transition: transform 0.22s cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+
+.group-toggle[aria-expanded="true"] .chev {
     transform: rotate(90deg);
 }
 
-.opt-group > summary:hover {
-    color: var(--red);
+.group-body {
+    padding-bottom: 14px;
+    animation: group-open 0.2s ease-out;
 }
 
-.opt-group > *:not(summary) {
-    margin-bottom: 14px;
-}
-
-.opt-group > *:last-child {
-    margin-bottom: 18px;
+@keyframes group-open {
+    from {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 .section-hint {
@@ -1130,19 +1242,16 @@ body.page-dashboard .site-header {
     border-radius: var(--radius);
     background-color: var(--white);
     color: var(--black);
-    appearance: none;
-    background-image: linear-gradient(45deg, transparent 50%, var(--grey-600) 50%),
-        linear-gradient(135deg, var(--grey-600) 50%, transparent 50%);
-    background-position: calc(100% - 16px) 50%, calc(100% - 11px) 50%;
-    background-size: 5px 5px, 5px 5px;
-    background-repeat: no-repeat;
     max-width: 240px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    transition: border-color 0.16s ease, box-shadow 0.16s ease,
+        background-color 0.16s ease;
 }
 
 .cmd-group select:focus {
     outline: none;
     border-color: var(--red);
-    box-shadow: 0 0 0 2px rgba(219, 0, 17, 0.14);
+    box-shadow: 0 0 0 3px rgba(219, 0, 17, 0.16);
 }
 
 .cmd-view select {
@@ -1151,6 +1260,11 @@ body.page-dashboard .site-header {
     border-width: 2px;
     padding-top: 7px;
     padding-bottom: 7px;
+    background-color: var(--grey-050);
+}
+
+.cmd-view select:hover {
+    background-color: var(--white);
 }
 
 .cmd-group select option,
@@ -1187,6 +1301,12 @@ body.page-dashboard .site-header {
     padding: 16px 22px 20px;
     width: 100%;
     overflow: hidden;
+    transition: grid-template-columns 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* The assistant takes a third column instead of covering the chart. */
+.dash-layout.chat-open {
+    grid-template-columns: minmax(0, 1fr) 320px 380px;
 }
 
 .dash-main {
@@ -1439,64 +1559,35 @@ perspective-viewer {
    AI chat
    ========================================================================== */
 
-.chat-fab {
-    position: fixed;
-    right: 26px;
-    bottom: 26px;
-    z-index: 60;
-    background: var(--black);
-    color: var(--white);
-    border: none;
-    border-radius: 40px;
-    padding: 13px 22px;
-    font-family: var(--font);
-    font-size: 13.5px;
-    font-weight: 700;
-    cursor: pointer;
-    box-shadow: var(--shadow-md);
-    display: inline-flex;
-    align-items: center;
-    gap: 9px;
-    transition: background 0.15s ease, transform 0.15s ease;
-}
-
-.chat-fab:hover {
-    background: var(--red);
-    transform: translateY(-2px);
-}
-
-.chat-fab .spark {
-    color: var(--red);
-    font-size: 15px;
-}
-
-.chat-fab:hover .spark {
-    color: var(--white);
-}
-
-.chat-panel {
-    position: fixed;
-    right: 26px;
-    bottom: 26px;
-    z-index: 61;
-    width: 384px;
-    max-width: calc(100vw - 40px);
-    height: auto;
-    min-height: 380px;
-    max-height: calc(100vh - 64px);
-    background: var(--white);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-lg);
+/* Docked assistant: a third column of the dashboard, never a floating box. */
+.chat-dock {
     display: flex;
     flex-direction: column;
+    min-height: 0;
+    background: var(--white);
+    border: 1px solid var(--grey-200);
+    border-top: 3px solid var(--red);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-xs);
     overflow: hidden;
-    border-top: 4px solid var(--red);
+    animation: dock-in 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes dock-in {
+    from {
+        opacity: 0;
+        transform: translateX(18px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
 }
 
 .chat-head {
     background: var(--black);
     color: var(--white);
-    padding: 13px 16px;
+    padding: 12px 15px;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -1507,17 +1598,22 @@ perspective-viewer {
     display: flex;
     flex-direction: column;
     line-height: 1.25;
+    min-width: 0;
 }
 
 .chat-head-title b {
-    font-size: 14px;
+    font-size: 13.5px;
 }
 
 .chat-head-title span {
-    font-size: 10.5px;
+    font-size: 10px;
     color: var(--grey-400);
     text-transform: uppercase;
     letter-spacing: 0.1em;
+}
+
+.chat-head-title span.is-live {
+    color: #6ee7b7;
 }
 
 .chat-close {
@@ -1529,81 +1625,69 @@ perspective-viewer {
     cursor: pointer;
     padding: 2px 6px;
     opacity: 0.7;
+    transition: opacity 0.15s ease, color 0.15s ease, transform 0.15s ease;
 }
 
 .chat-close:hover {
     opacity: 1;
     color: var(--red);
-}
-
-.chat-config {
-    border-bottom: 1px solid var(--grey-200);
-    background: var(--white);
-    flex: 0 0 auto;
-}
-
-.chat-config > summary {
-    list-style: none;
-    cursor: pointer;
-    padding: 10px 16px;
-    font-size: 10.5px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.09em;
-    color: var(--grey-600);
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    user-select: none;
-}
-
-.chat-config > summary::-webkit-details-marker {
-    display: none;
-}
-
-.chat-config > summary:hover {
-    color: var(--black);
-}
-
-.chat-config > summary::before {
-    content: "▸";
-    color: var(--red);
-    transition: transform 0.15s ease;
-}
-
-.chat-config[open] > summary::before {
     transform: rotate(90deg);
 }
 
-.chat-config-body {
-    padding: 2px 16px 14px;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    max-height: 34vh;
+.chat-connection {
+    flex: 0 0 auto;
+    border-bottom: 1px solid var(--grey-200);
+    max-height: 46%;
     overflow-y: auto;
 }
 
-.chat-config-body .field {
-    margin-bottom: 0;
+.chat-connection .opt-group {
+    border-bottom: none;
 }
 
-.chat-config-body .field > label {
+.chat-connection .group-toggle {
+    padding: 11px 15px;
     font-size: 10.5px;
-    margin-bottom: 5px;
+    color: var(--grey-600);
 }
 
-.chat-config-body .field input {
-    padding: 8px 10px;
-    font-size: 12.5px;
+.chat-connection .group-body {
+    padding: 0 15px 14px;
 }
 
-.chat-config-body .help {
-    margin-top: 4px;
+.chat-note {
+    margin: 0 0 12px;
+    padding: 9px 11px;
+    background: var(--grey-050);
+    border-left: 3px solid var(--grey-300);
+    border-radius: var(--radius);
+    font-size: 11.5px;
+    line-height: 1.5;
+    color: var(--grey-800);
 }
 
-.chat-config-body code {
+.chat-note b {
+    color: var(--black);
+}
+
+.chat-note code {
     font-size: 11px;
+}
+
+.chat-status {
+    flex: 0 0 auto;
+    padding: 9px 15px;
+    font-size: 11.5px;
+    line-height: 1.45;
+    background: var(--red-tint);
+    color: var(--red-dark);
+    border-bottom: 1px solid #f6c9cc;
+}
+
+.chat-status.is-live {
+    background: #eefaf3;
+    color: var(--green);
+    border-bottom-color: #c8ecd9;
 }
 
 .chat-config-actions {
@@ -1613,13 +1697,17 @@ perspective-viewer {
 
 .chat-body {
     flex: 1 1 auto;
-    min-height: 70px;
+    min-height: 90px;
     overflow-y: auto;
-    padding: 16px;
+    padding: 14px;
     background: var(--grey-050);
     display: flex;
     flex-direction: column;
-    gap: 11px;
+    gap: 10px;
+}
+
+.chat-body:empty {
+    display: none;
 }
 
 .msg {
@@ -1719,8 +1807,13 @@ perspective-viewer {
         overflow: visible;
     }
 
-    .dash-layout {
+    .dash-layout,
+    .dash-layout.chat-open {
         grid-template-columns: minmax(0, 1fr);
+    }
+
+    .chat-dock {
+        min-height: 460px;
     }
 
     body.page-dashboard {

@@ -37,6 +37,7 @@ const state = {
     registered: [],    // plugin names Perspective actually exposes
     profile: null,
     ready: false,
+    table: null,       // the Perspective table, kept for viewer rebuilds
 };
 
 /**
@@ -295,15 +296,23 @@ function buildViewConfig(spec) {
     }
 
     if (spec.kind === "xy") {
-        // X/Y plugins read the group_by axis as X, so prefer a numeric X and
-        // keep the plotted measures distinct from it.
-        const x = state.numeric.find((n) => !columns.includes(n)) || groupAxis[0];
-        const ys = columns.filter((c) => c !== x);
+        // X/Y plugins read TWO main values (X and Y) and crash with
+        // "Cannot read properties of undefined (reading 'name')" when fewer
+        // than two numeric columns are supplied. The X axis is the first
+        // column, so a single measure has to borrow a second numeric column
+        // or the view is refused outright.
+        const x = columns[0];
+        const rest = columns.filter((c) => c !== x);
+        const spare = state.numeric.filter(
+            (n) => n !== x && !rest.includes(n)
+        );
+        const ys = rest.length ? rest : spare.slice(0, 1);
+        if (!ys.length) return null;
         return {
             plugin: spec.plugin,
-            group_by: [x],
+            group_by: [],
             split_by: split,
-            columns: ys.length ? ys : columns,
+            columns: [x, ...ys],
             filter: state.filter,
             sort: state.sort,
         };
@@ -384,22 +393,74 @@ async function refreshView() {
     await applyConfig(next);
 }
 
+/** Attach the config-sync listener to a viewer element. */
+function attachViewerEvents(viewer) {
+    viewer.addEventListener("perspective-config-update", (event) => {
+        const cfg = event.detail;
+        if (!cfg) return;
+        if (cfg.plugin) state.plugin = cfg.plugin;
+        syncToolbarFromConfig(cfg);
+        markActiveView();
+    });
+}
+
 /**
- * Apply a *complete* config. On failure, roll back to the last good config so
- * the viewer never ends up on a broken canvas.
+ * A bad chart config can leave the d3fc plugin permanently broken - further
+ * restores keep failing until the page is reloaded. Rebuilding the element is
+ * the only reliable way out, so the app heals itself instead of asking the
+ * user to refresh.
+ */
+async function rebuildViewer() {
+    const old = $("viewer");
+    const fresh = document.createElement("perspective-viewer");
+    fresh.id = "viewer";
+    old.replaceWith(fresh);
+    attachViewerEvents(fresh);
+
+    if (state.table) {
+        await fresh.load(state.table);
+    }
+    const safe = {
+        plugin: "Datagrid",
+        group_by: [],
+        split_by: [],
+        columns: state.schema.slice(),
+        filter: [],
+        sort: [],
+    };
+    await fresh.restore(safe);
+    state.config = safe;
+    state.plugin = "Datagrid";
+    state.groupBy = [];
+    state.splitBy = [];
+    state.columns = state.schema.slice();
+    markActiveView();
+}
+
+/**
+ * Apply a *complete* config. If the plugin rejects it, rebuild the viewer and
+ * land on the flat grid rather than leaving a dead canvas behind.
  */
 async function applyConfig(next) {
-    const viewer = $("viewer");
     try {
-        await viewer.restore(next);
+        await $("viewer").restore(next);
+        state.config = next;
         setStatus("Ready");
         return true;
     } catch (err) {
-        setStatus("View unavailable");
-        toast(
-            "Could not apply that view: " + ((err && err.message) || String(err)),
-            "error"
-        );
+        const message = (err && err.message) || String(err);
+        try {
+            await rebuildViewer();
+            setStatus("Ready");
+            toast(
+                "That view could not be drawn, so the grid was restored. " +
+                    "Reason: " + message,
+                "error"
+            );
+        } catch (rebuildErr) {
+            setStatus("View unavailable");
+            toast("Could not apply that view: " + message, "error");
+        }
         return false;
     }
 }
@@ -691,16 +752,11 @@ async function loadPerspective() {
 
     const worker = await perspective.worker();
     const table = await worker.table(arrow);
+    state.table = table;
 
     // Keep our own config in step with whatever the user builds in the
     // viewer's Pivot panel, so switching views never resets their work.
-    viewer.addEventListener("perspective-config-update", (event) => {
-        const cfg = event.detail;
-        if (!cfg) return;
-        if (cfg.plugin) state.plugin = cfg.plugin;
-        syncToolbarFromConfig(cfg);
-        markActiveView();
-    });
+    attachViewerEvents(viewer);
 
     await viewer.load(table);
 
@@ -950,12 +1006,33 @@ function chatHasCredentials() {
 
 function setChatMode() {
     const live = chatHasCredentials();
-    $("chatMode").textContent = live
-        ? "Live model connected"
-        : "Placeholder replies";
-    $("chatHint").textContent = live
-        ? "Live mode — answers come from the endpoint configured above."
-        : "Placeholder mode — add an endpoint and API key for live answers.";
+
+    $("chatMode").textContent = live ? "Model connected" : "No model connected";
+    $("chatMode").classList.toggle("is-live", live);
+
+    const state = $("aiState");
+    if (state) {
+        state.textContent = live ? "Connected" : "No model";
+        $("chatToggle").classList.toggle("is-live", live);
+    }
+
+    const status = $("chatStatus");
+    if (status) {
+        status.classList.toggle("is-live", live);
+        status.textContent = live
+            ? "Connected. Answers come from your endpoint — data leaves this " +
+              "machine only if that endpoint is remote."
+            : "No model connected — add an endpoint and API key above to start " +
+              "asking questions.";
+    }
+
+    // The connection form is the useful thing to show until a model is set up.
+    const toggle = document.querySelector("#chatConnection .group-toggle");
+    const panel = $("grpConnection");
+    if (toggle && panel && !live) {
+        toggle.setAttribute("aria-expanded", "true");
+        panel.hidden = false;
+    }
 }
 
 function loadChatConfig() {
@@ -995,26 +1072,27 @@ function clearChatConfig() {
 }
 
 function initChat() {
-    const fab = $("chatFab");
-    const panel = $("chatPanel");
+    const dock = $("chatDock");
+    const toggle = $("chatToggle");
+    const layout = $("dashLayout");
     const body = $("chatBody");
     const input = $("chatInput");
 
     loadChatConfig();
 
-    const open = () => {
-        panel.hidden = false;
-        fab.style.display = "none";
-        setChatMode();
-        input.focus();
-    };
-    const close = () => {
-        panel.hidden = true;
-        fab.style.display = "";
+    const setOpen = (open) => {
+        dock.hidden = !open;
+        layout.classList.toggle("chat-open", open);
+        toggle.classList.toggle("is-open", open);
+        toggle.setAttribute("aria-expanded", open ? "true" : "false");
+        if (open) {
+            setChatMode();
+            input.focus();
+        }
     };
 
-    fab.addEventListener("click", open);
-    $("chatClose").addEventListener("click", close);
+    toggle.addEventListener("click", () => setOpen(dock.hidden));
+    $("chatClose").addEventListener("click", () => setOpen(false));
 
     ["chatEndpoint", "chatKey", "chatModel"].forEach((id) =>
         $(id).addEventListener("input", setChatMode)
@@ -1022,9 +1100,12 @@ function initChat() {
     $("chatSaveCfg").addEventListener("click", () => {
         saveChatConfig();
         setChatMode();
-        $("chatHint").textContent = chatHasCredentials()
-            ? "Connection saved for this browser."
-            : "Add both an endpoint and an API key to connect.";
+        toast(
+            chatHasCredentials()
+                ? "Connection saved for this browser."
+                : "Add both an endpoint and an API key to connect.",
+            chatHasCredentials() ? "success" : "warn"
+        );
     });
     $("chatClearCfg").addEventListener("click", clearChatConfig);
 
@@ -1084,7 +1165,53 @@ function initChat() {
 
 /* ------------------------------------------------------------------- boot */
 
+/**
+ * Last line of defence: if the d3fc plugin throws while drawing on its own
+ * (for example after the user drags an impossible combination into an X/Y
+ * chart), rebuild the viewer so the page never has to be reloaded.
+ */
+let recovering = false;
+let lastRecovery = 0;
+
+function looksLikePluginCrash(reason) {
+    const text = (reason && (reason.stack || reason.message)) || String(reason || "");
+    return (
+        text.indexOf("perspective-viewer-d3fc") >= 0 &&
+        /reading '|is not a function|of undefined|of null/.test(text)
+    );
+}
+
+async function selfHeal(reason) {
+    if (recovering || !state.ready) return;
+    if (Date.now() - lastRecovery < 5000) return;
+    recovering = true;
+    lastRecovery = Date.now();
+    try {
+        await rebuildViewer();
+        setStatus("Ready");
+        toast(
+            "That combination could not be drawn, so the grid was restored. " +
+                "Reason: " + ((reason && reason.message) || reason),
+            "warn"
+        );
+    } catch (_err) {
+        /* nothing more we can do automatically */
+    } finally {
+        recovering = false;
+    }
+}
+
+window.addEventListener("unhandledrejection", (event) => {
+    if (looksLikePluginCrash(event.reason)) selfHeal(event.reason);
+});
+window.addEventListener("error", (event) => {
+    if (looksLikePluginCrash(event.error || event.message)) {
+        selfHeal(event.error || event.message);
+    }
+});
+
 async function main() {
+    window.CPA.initCollapsibles();
     initChat();
     markActiveView();
 
