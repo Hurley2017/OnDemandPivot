@@ -1,0 +1,45 @@
+Act as an expert Full-Stack Python Developer specializing in Flask, Pandas, Perspective JS (@finos/perspective), and local desktop-web hybrid applications. 
+
+Your task is to build a local data analysis dashboard. The application will run locally via a Flask backend, but must be packaged as a single standalone `.exe` file. When the user double-clicks the `.exe`, it should automatically spin up the Flask server and open the default web browser to the app's local URL (e.g., http://127.0.0.1:5000).
+
+### Tech Stack & Libraries
+*   **Backend:** Python, Flask, Pandas, and PyArrow (for efficient data serialization).
+*   **Frontend Data Engine:** `@finos/perspective` and `<perspective-viewer>` (Web Components via CDN).
+    *   *Note: Perspective handles both the pivot table datagrid and the charting natively via WebAssembly. Use this instead of older libraries like PivotTable.js or Chart.js.*
+*   **Frontend UI:** HTML, CSS, Vanilla JavaScript.
+*   **Packaging/Execution:** `PyInstaller` (for the .exe) and Python's `webbrowser` module.
+
+### Core Features to Implement
+
+**1. Drag-and-Drop Upload & Validation**
+*   Create an upload page with a drag-and-drop zone accepting `.csv` and `.xlsx` files.
+*   Once uploaded, the backend should parse the file and return a summary of the columns (KPIs), data types, and identify any missing values or anomalies.
+
+**2. Data Restructuring & Preview**
+*   Before finalizing the upload, present a data preview to the user.
+*   Provide UI controls to restructure the data (e.g., an input field to "Skip first N rows" if the uploaded file has blank rows).
+*   Include a "Process Data" button. Once clicked, the backend applies the cleaning steps and redirects to the main dashboard.
+
+**3. Interactive Dashboard (Perspective Viewer)**
+*   Integrate `<perspective-viewer>`, `<perspective-viewer-datagrid>`, and `<perspective-viewer-d3fc>` (for charts) in the main dashboard view.
+*   The Flask backend should serialize the processed Pandas dataframe to Apache Arrow format and send it to the frontend.
+*   Load the Arrow data into the Perspective table. This single Web Component will serve as both the drag-and-drop pivot table and the chart builder, allowing the user to seamlessly switch between grids, bar charts, line charts, etc.
+*   **KPI Information:** A side panel that displays metadata about the selected KPIs (e.g., missing values, data types) based on the initial validation.
+
+**4. Placeholder AI Chat Window**
+*   Build a floating or docked chat UI window labeled "AI Data Assistant".
+*   Users should be able to type questions about their data.
+*   For now, the backend should simply return a generic placeholder response (e.g., "AI model integration pending. You asked: [User Query]"). Do not integrate any actual LLM APIs yet.
+
+**5. Execution & Packaging Logic**
+*   Provide the specific Python script logic required to start the Flask app and simultaneously trigger `webbrowser.open()` after a short delay.
+*   Provide the exact `pyinstaller` command required to compile this Flask app into a single `.exe` file, ensuring templates and static folders are properly bundled.
+
+### First Output Requirement:
+Do not write the entire codebase at once. For your first response, provide:
+1. The project directory structure.
+2. The `app.py` code containing the Flask setup, the `webbrowser` auto-open logic, and the routing skeleton.
+3. The `requirements.txt` file (ensuring `pyarrow` is included).
+4. The exact `pyinstaller` command to bundle the app.
+
+Ask for my confirmation before moving on to the HTML/JS frontend and Pandas/Perspective data logic.

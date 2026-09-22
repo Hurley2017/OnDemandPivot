@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Client Profitability Analytics — Import Data</title>
+    <link rel="icon"
+          href="{{ url_for('static', filename='icon/LOGO.PNG') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="page-upload">
+
+<div class="topbar">
+    <span><strong>Client Profitability Analytics</strong> &nbsp;·&nbsp; Local Data Analysis</span>
+    <span><span class="dot"></span>Runs entirely on this machine — no data leaves your browser</span>
+</div>
+
+<header class="app-header">
+    <div class="brand">
+        <img class="brand-logo"
+             src="{{ url_for('static', filename='icon/LOGO.PNG') }}"
+             alt="Client Profitability Analytics logo">
+        <div class="brand-text">
+            <span class="brand-name">Client Profitability <span>Analytics</span></span>
+            <span class="brand-tag">Self-service profitability workbench</span>
+        </div>
+    </div>
+    <div class="header-actions">
+        <span class="dataset-pill">Step <b>1</b> of 2 — Import &amp; structure</span>
+    </div>
+</header>
+
+<main class="page">
+    <div class="page-intro">
+        <h1>Upload your <em>data</em></h1>
+        <p>
+            Drop a CSV or Excel file to profile it, fix structural quirks such as
+            banner rows, leading columns or stray whitespace, then launch an
+            interactive Perspective pivot table and chart builder.
+        </p>
+    </div>
+
+    <div id="alert" class="notice notice-error" hidden></div>
+
+    <div class="stack">
+
+        <!-- Step 1: drop zone ------------------------------------------------ -->
+        <section class="card">
+            <div class="card-head">
+                <h2><span class="step">1</span>Select a file</h2>
+                <div style="display:flex;gap:8px;align-items:center">
+                    <button class="btn btn-ghost btn-sm" id="sampleBtn" type="button">
+                        Load sample data
+                    </button>
+                    <span class="tag">Drag &amp; drop</span>
+                </div>
+            </div>
+            <div class="card-body">
+                <div id="dropzone" class="dropzone" tabindex="0" role="button"
+                     aria-label="Upload a CSV or Excel file">
+                    <div class="dz-icon" aria-hidden="true">⬆</div>
+                    <div class="dz-title">Drop your file here</div>
+                    <div class="dz-sub">or <b>browse</b> from your computer</div>
+                    <div class="dz-formats">
+                        <span class="tag">.csv</span>
+                        <span class="tag">.xlsx</span>
+                        <span class="tag">Max 100 MB</span>
+                    </div>
+                </div>
+                <input id="fileInput" class="file-input" type="file"
+                       accept=".csv,.xlsx">
+                <p id="fileMeta" class="dz-sub" style="margin-top:14px" hidden></p>
+            </div>
+        </section>
+
+        <!-- Step 2: profile -------------------------------------------------- -->
+        <section id="profileCard" class="card" hidden>
+            <div class="card-head">
+                <h2><span class="step">2</span>Data profile &amp; KPI summary</h2>
+                <span id="profileTag" class="tag">Awaiting file</span>
+            </div>
+            <div class="card-body">
+                <div id="stats" class="stat-grid"></div>
+
+                <h3 class="section-label">Column profile</h3>
+                <div class="table-wrap">
+                    <table class="data" id="profileTable">
+                        <thead>
+                            <tr>
+                                <th>Column</th>
+                                <th>Type</th>
+                                <th>Pandas dtype</th>
+                                <th>Missing</th>
+                                <th>Distinct</th>
+                                <th>Sample</th>
+                                <th>Anomalies</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- Step 3: restructure + preview ------------------------------------ -->
+        <section id="previewCard" class="card" hidden>
+            <div class="card-head">
+                <h2><span class="step">3</span>Restructure &amp; preview</h2>
+                <span id="previewTag" class="tag">—</span>
+            </div>
+            <div class="card-body">
+
+                <div class="controls-grid">
+
+                    <div class="field">
+                        <label for="skipRows">Skip first N rows</label>
+                        <input id="skipRows" type="number" min="0" max="500" value="0">
+                        <div class="help">
+                            Use this when the file starts with title/banner rows
+                            before the real header.
+                        </div>
+                    </div>
+
+                    <div class="field">
+                        <label for="skipCols">Skip first N columns</label>
+                        <input id="skipCols" type="number" min="0" max="200" value="0">
+                        <div class="help">
+                            Drops the leading columns (IDs, notes, spacer columns)
+                            that sit before your real data block.
+                        </div>
+                    </div>
+
+                    <div class="field field-range">
+                        <label for="dataRange">Data range
+                            <span class="tag">For power users</span>
+                        </label>
+                        <input id="dataRange" type="text"
+                               placeholder="e.g. B3:H500" autocomplete="off"
+                               spellcheck="false">
+                        <div class="help">
+                            Already know exactly where your table lives? Give the
+                            Excel-style range covering the <b>header row through the
+                            last data row</b>. A range replaces both “skip rows” and
+                            “skip columns”.
+                        </div>
+                    </div>
+
+                    <div class="field">
+                        <label>Cleaning options</label>
+                        <div class="checks">
+                            <label class="check">
+                                <input type="checkbox" id="optStrip" checked>
+                                <span>Trim surrounding whitespace
+                                    <span class="help">Removes stray spaces from text cells.</span>
+                                </span>
+                            </label>
+                            <label class="check">
+                                <input type="checkbox" id="optDropRows" checked>
+                                <span>Drop fully-empty rows
+                                    <span class="help">Removes rows where every cell is blank.</span>
+                                </span>
+                            </label>
+                            <label class="check">
+                                <input type="checkbox" id="optDropCols" checked>
+                                <span>Drop fully-empty columns
+                                    <span class="help">Removes columns with no values at all.</span>
+                                </span>
+                            </label>
+                            <label class="check">
+                                <input type="checkbox" id="optDedupe" checked>
+                                <span>Remove duplicate rows
+                                    <span class="help">Keeps only the first occurrence.</span>
+                                </span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <h3 class="section-label">
+                    Preview <span id="previewCount" style="color:var(--hsbc-red)"></span>
+                </h3>
+                <div class="table-wrap table-wrap-tall">
+                    <table class="data" id="previewTable">
+                        <thead><tr></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="card-foot">
+                <span class="dz-sub" id="footSummary">—</span>
+                <div style="display:flex;gap:10px">
+                    <button class="btn btn-ghost" id="resetBtn" type="button">Start over</button>
+                    <button class="btn btn-primary" id="processBtn" type="button">
+                        Process data &nbsp;→
+                    </button>
+                </div>
+            </div>
+        </section>
+
+    </div>
+</main>
+
+<script src="{{ url_for('static', filename='js/upload.js') }}"></script>
+</body>
+</html>

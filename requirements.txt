@@ -1,0 +1,6 @@
+flask>=3.0
+pandas>=2.0
+numpy>=1.26
+pyarrow>=14.0
+openpyxl>=3.1
+pyinstaller>=6.0

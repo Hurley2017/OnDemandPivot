@@ -1,0 +1,1406 @@
+/* ==========================================================================
+   OnDemandPivot — HSBC-inspired corporate theme
+   Palette: HSBC Red #DB0011 / Black / White / cool greys
+   Type:    Arial, Helvetica, sans-serif (HSBC brand web stack)
+   ========================================================================== */
+
+:root {
+    --hsbc-red: #db0011;
+    --hsbc-red-dark: #b5000e;
+    --hsbc-red-tint: #fff1f1;
+    --hsbc-black: #000000;
+    --hsbc-ink: #1a1a1a;
+    --hsbc-grey-800: #333333;
+    --hsbc-grey-600: #666666;
+    --hsbc-grey-400: #999999;
+    --hsbc-grey-300: #c8c8c8;
+    --hsbc-grey-200: #e0e0e0;
+    --hsbc-grey-100: #f2f2f2;
+    --hsbc-grey-050: #f7f7f7;
+    --hsbc-white: #ffffff;
+    --hsbc-green: #00875a;
+
+    --font-stack: Arial, "Helvetica Neue", Helvetica, sans-serif;
+    --radius: 2px;
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
+    --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.12);
+    --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.22);
+
+    --header-h: 64px;
+    --topbar-h: 30px;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+}
+
+body {
+    font-family: var(--font-stack);
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--hsbc-ink);
+    background: var(--hsbc-grey-100);
+    -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+h4 {
+    margin: 0;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+}
+
+a {
+    color: var(--hsbc-red);
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+/* --------------------------------------------------------------------------
+   Top utility bar + main header
+   -------------------------------------------------------------------------- */
+
+.topbar {
+    height: var(--topbar-h);
+    background: var(--hsbc-black);
+    color: var(--hsbc-grey-300);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 24px;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.topbar strong {
+    color: var(--hsbc-white);
+    font-weight: 700;
+}
+
+.topbar .dot {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--hsbc-green);
+    margin-right: 6px;
+    vertical-align: middle;
+}
+
+.app-header {
+    height: var(--header-h);
+    background: var(--hsbc-white);
+    border-bottom: 3px solid var(--hsbc-red);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 24px;
+    position: sticky;
+    top: 0;
+    z-index: 40;
+}
+
+.brand {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+/* Uploaded brand logo (static/icon/LOGO.PNG). */
+.brand-logo {
+    height: 40px;
+    width: auto;
+    max-width: 190px;
+    object-fit: contain;
+    display: block;
+    flex: 0 0 auto;
+}
+
+.brand-text {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.15;
+}
+
+.brand-name {
+    font-size: 19px;
+    font-weight: 700;
+    color: var(--hsbc-black);
+    letter-spacing: -0.02em;
+}
+
+.brand-name span {
+    color: var(--hsbc-red);
+}
+
+.brand-tag {
+    font-size: 10.5px;
+    color: var(--hsbc-grey-600);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+}
+
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.dataset-pill {
+    font-size: 12px;
+    color: var(--hsbc-grey-600);
+    background: var(--hsbc-grey-100);
+    border: 1px solid var(--hsbc-grey-200);
+    padding: 6px 12px;
+    border-radius: var(--radius);
+    max-width: 340px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dataset-pill b {
+    color: var(--hsbc-black);
+}
+
+/* --------------------------------------------------------------------------
+   Buttons
+   -------------------------------------------------------------------------- */
+
+.btn {
+    font-family: var(--font-stack);
+    font-size: 13px;
+    font-weight: 700;
+    padding: 10px 22px;
+    border-radius: var(--radius);
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+    letter-spacing: 0.02em;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    line-height: 1.2;
+}
+
+.btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.btn-primary {
+    background: var(--hsbc-red);
+    color: var(--hsbc-white);
+    border-color: var(--hsbc-red);
+}
+
+.btn-primary:hover:not(:disabled) {
+    background: var(--hsbc-red-dark);
+    border-color: var(--hsbc-red-dark);
+}
+
+.btn-dark {
+    background: var(--hsbc-black);
+    color: var(--hsbc-white);
+    border-color: var(--hsbc-black);
+}
+
+.btn-dark:hover:not(:disabled) {
+    background: var(--hsbc-grey-800);
+}
+
+.btn-ghost {
+    background: var(--hsbc-white);
+    color: var(--hsbc-black);
+    border-color: var(--hsbc-grey-300);
+}
+
+.btn-ghost:hover:not(:disabled) {
+    border-color: var(--hsbc-black);
+    background: var(--hsbc-grey-050);
+}
+
+.btn-sm {
+    padding: 7px 14px;
+    font-size: 12px;
+}
+
+.btn-block {
+    width: 100%;
+    justify-content: center;
+}
+
+/* --------------------------------------------------------------------------
+   Page shell
+   -------------------------------------------------------------------------- */
+
+.page {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: 28px 32px 72px;
+}
+
+.page-intro {
+    margin-bottom: 26px;
+}
+
+.page-intro h1 {
+    font-size: 30px;
+    margin-bottom: 6px;
+}
+
+.page-intro h1 em {
+    font-style: normal;
+    color: var(--hsbc-red);
+}
+
+.page-intro p {
+    margin: 0;
+    color: var(--hsbc-grey-600);
+    font-size: 15px;
+    max-width: 720px;
+}
+
+.card {
+    background: var(--hsbc-white);
+    border: 1px solid var(--hsbc-grey-200);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-sm);
+}
+
+.card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--hsbc-grey-200);
+}
+
+.card-head h2 {
+    font-size: 15px;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+}
+
+.card-head .step {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    background: var(--hsbc-red);
+    color: var(--hsbc-white);
+    font-size: 12px;
+    font-weight: 700;
+    border-radius: 50%;
+    margin-right: 10px;
+}
+
+.card-body {
+    padding: 20px;
+}
+
+.card-foot {
+    padding: 16px 20px;
+    border-top: 1px solid var(--hsbc-grey-200);
+    background: var(--hsbc-grey-050);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.stack {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+/* --------------------------------------------------------------------------
+   Drag & drop zone
+   -------------------------------------------------------------------------- */
+
+.dropzone {
+    border: 2px dashed var(--hsbc-grey-300);
+    background: var(--hsbc-white);
+    border-radius: var(--radius);
+    padding: 54px 28px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.dropzone:hover,
+.dropzone.is-over {
+    border-color: var(--hsbc-red);
+    background: var(--hsbc-red-tint);
+}
+
+.dropzone.is-over .dz-icon {
+    transform: translateY(-4px);
+}
+
+.dz-icon {
+    width: 54px;
+    height: 54px;
+    margin: 0 auto 16px;
+    border-radius: 50%;
+    background: var(--hsbc-red-tint);
+    color: var(--hsbc-red);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    transition: transform 0.15s ease;
+}
+
+.dz-title {
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 6px;
+}
+
+.dz-sub {
+    color: var(--hsbc-grey-600);
+    font-size: 13px;
+}
+
+.dz-sub b {
+    color: var(--hsbc-red);
+    text-decoration: underline;
+}
+
+.dz-formats {
+    margin-top: 18px;
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+}
+
+.tag {
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 4px 10px;
+    border: 1px solid var(--hsbc-grey-300);
+    color: var(--hsbc-grey-600);
+    border-radius: var(--radius);
+    background: var(--hsbc-grey-050);
+}
+
+.file-input {
+    display: none;
+}
+
+/* --------------------------------------------------------------------------
+   Stat tiles
+   -------------------------------------------------------------------------- */
+
+.stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(168px, 1fr));
+    gap: 14px;
+}
+
+.stat {
+    background: var(--hsbc-white);
+    border: 1px solid var(--hsbc-grey-200);
+    border-left: 4px solid var(--hsbc-black);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+}
+
+.stat.alert {
+    border-left-color: var(--hsbc-red);
+}
+
+.stat-label {
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--hsbc-grey-600);
+    margin-bottom: 6px;
+}
+
+.stat-value {
+    font-size: 25px;
+    font-weight: 700;
+    color: var(--hsbc-black);
+    line-height: 1.1;
+}
+
+.stat.alert .stat-value {
+    color: var(--hsbc-red);
+}
+
+.stat-hint {
+    font-size: 11.5px;
+    color: var(--hsbc-grey-400);
+    margin-top: 3px;
+}
+
+/* --------------------------------------------------------------------------
+   Tables (profile + preview)
+   -------------------------------------------------------------------------- */
+
+.table-wrap {
+    overflow: auto;
+    max-height: 340px;
+    border: 1px solid var(--hsbc-grey-200);
+}
+
+.table-wrap-tall {
+    max-height: min(62vh, 640px);
+}
+
+.section-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--hsbc-grey-600);
+    margin: 22px 0 10px;
+    padding-bottom: 7px;
+    border-bottom: 1px solid var(--hsbc-grey-200);
+}
+
+table.data {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12.5px;
+    white-space: nowrap;
+}
+
+table.data thead th {
+    position: sticky;
+    top: 0;
+    background: var(--hsbc-black);
+    color: var(--hsbc-white);
+    text-align: left;
+    font-weight: 700;
+    font-size: 11px;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    padding: 9px 12px;
+    z-index: 2;
+    border-right: 1px solid var(--hsbc-grey-800);
+}
+
+table.data tbody td {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--hsbc-grey-200);
+    border-right: 1px solid var(--hsbc-grey-100);
+    color: var(--hsbc-ink);
+}
+
+table.data tbody tr:nth-child(even) {
+    background: var(--hsbc-grey-050);
+}
+
+table.data tbody tr:hover {
+    background: var(--hsbc-red-tint);
+}
+
+table.data td.num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+table.data td.null {
+    color: var(--hsbc-grey-400);
+    font-style: italic;
+}
+
+.badge {
+    display: inline-block;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: var(--radius);
+    border: 1px solid transparent;
+}
+
+.badge-number {
+    background: #eef6ff;
+    color: #0b5394;
+    border-color: #cfe3f7;
+}
+
+.badge-string {
+    background: var(--hsbc-grey-100);
+    color: var(--hsbc-grey-800);
+    border-color: var(--hsbc-grey-200);
+}
+
+.badge-datetime {
+    background: #eefaf3;
+    color: var(--hsbc-green);
+    border-color: #c8ecd9;
+}
+
+.badge-boolean {
+    background: #fff7e6;
+    color: #a05a00;
+    border-color: #f5e0b3;
+}
+
+.badge-alert {
+    background: var(--hsbc-red-tint);
+    color: var(--hsbc-red);
+    border-color: #f6c9cc;
+}
+
+/* --------------------------------------------------------------------------
+   Restructure controls
+   -------------------------------------------------------------------------- */
+
+.controls-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 20px;
+    align-items: start;
+}
+
+.field label {
+    display: block;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: var(--hsbc-grey-600);
+    margin-bottom: 7px;
+}
+
+.field input[type="number"],
+.field input[type="text"],
+.field select {
+    width: 100%;
+    font-family: var(--font-stack);
+    font-size: 14px;
+    padding: 10px 12px;
+    border: 1px solid var(--hsbc-grey-300);
+    border-radius: var(--radius);
+    background: var(--hsbc-white);
+    color: var(--hsbc-black);
+}
+
+.field input:focus,
+.field select:focus {
+    outline: none;
+    border-color: var(--hsbc-red);
+    box-shadow: 0 0 0 2px rgba(219, 0, 17, 0.15);
+}
+
+.field .help {
+    font-size: 11.5px;
+    color: var(--hsbc-grey-400);
+    margin-top: 6px;
+}
+
+.field label .tag {
+    margin-left: 6px;
+    vertical-align: middle;
+}
+
+/* Range input spans the whole control grid — it overrides the others. */
+.field-range {
+    grid-column: 1 / -1;
+}
+
+.field-range input {
+    font-family: "Consolas", "SFMono-Regular", Menlo, monospace;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    border-color: var(--hsbc-black);
+}
+
+.field-range input::placeholder {
+    text-transform: none;
+    letter-spacing: normal;
+    color: var(--hsbc-grey-400);
+}
+
+.checks {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding-top: 4px;
+}
+
+.check {
+    display: flex;
+    align-items: flex-start;
+    gap: 9px;
+    font-size: 13px;
+    color: var(--hsbc-ink);
+    cursor: pointer;
+}
+
+.check input {
+    margin: 2px 0 0;
+    accent-color: var(--hsbc-red);
+    width: 15px;
+    height: 15px;
+}
+
+.check .help {
+    display: block;
+    font-size: 11.5px;
+    color: var(--hsbc-grey-400);
+}
+
+/* --------------------------------------------------------------------------
+   Notices
+   -------------------------------------------------------------------------- */
+
+.notice {
+    padding: 11px 14px;
+    border-radius: var(--radius);
+    font-size: 13px;
+    border-left: 4px solid var(--hsbc-grey-400);
+    background: var(--hsbc-grey-100);
+}
+
+.notice-error {
+    background: var(--hsbc-red-tint);
+    border-left-color: var(--hsbc-red);
+    color: var(--hsbc-red-dark);
+    font-weight: 700;
+}
+
+.notice-info {
+    background: #eef6ff;
+    border-left-color: #0b5394;
+    color: #0b5394;
+}
+
+.notice-success {
+    background: #eefaf3;
+    border-left-color: var(--hsbc-green);
+    color: var(--hsbc-green);
+}
+
+[hidden] {
+    display: none !important;
+}
+
+.spinner {
+    width: 15px;
+    height: 15px;
+    border: 2px solid rgba(255, 255, 255, 0.4);
+    border-top-color: var(--hsbc-white);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+}
+
+.btn-ghost .spinner {
+    border-color: var(--hsbc-grey-300);
+    border-top-color: var(--hsbc-black);
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* ==========================================================================
+   Dashboard
+   ========================================================================== */
+
+/* The dashboard owns the whole viewport: header stays put, the grid below
+   fills the remaining height and scrolls internally instead of the page. */
+body.page-dashboard {
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+body.page-dashboard .topbar,
+body.page-dashboard .app-header {
+    flex: 0 0 auto;
+    position: static;
+}
+
+body.page-dashboard #loadError {
+    flex: 0 0 auto;
+    margin: 12px 20px 0;
+}
+
+.dash-layout {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 340px;
+    gap: 18px;
+    padding: 16px 20px;
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    align-items: stretch;
+    overflow: hidden;
+}
+
+.dash-main {
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    overflow: hidden;
+}
+
+/* Toolbar */
+.toolbar {
+    flex: 0 0 auto;
+    background: var(--hsbc-white);
+    border: 1px solid var(--hsbc-grey-200);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-sm);
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+}
+
+.toolbar-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.toolbar-group > label {
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: var(--hsbc-grey-600);
+}
+
+.toolbar select {
+    font-family: var(--font-stack);
+    font-size: 13px;
+    padding: 7px 10px;
+    border: 1px solid var(--hsbc-grey-300);
+    border-radius: var(--radius);
+    background: var(--hsbc-white);
+    max-width: 210px;
+}
+
+.toolbar select:focus {
+    outline: none;
+    border-color: var(--hsbc-red);
+}
+
+.toolbar-divider {
+    width: 1px;
+    height: 26px;
+    background: var(--hsbc-grey-200);
+}
+
+/* View switcher */
+.view-switch {
+    display: flex;
+    gap: 0;
+    border: 1px solid var(--hsbc-grey-300);
+    border-radius: var(--radius);
+    overflow: hidden;
+}
+
+.view-btn {
+    font-family: var(--font-stack);
+    font-size: 12px;
+    font-weight: 700;
+    padding: 7px 15px;
+    background: var(--hsbc-white);
+    color: var(--hsbc-grey-600);
+    border: none;
+    border-right: 1px solid var(--hsbc-grey-300);
+    cursor: pointer;
+    transition: background 0.12s ease, color 0.12s ease;
+}
+
+.view-btn:last-child {
+    border-right: none;
+}
+
+.view-btn:hover {
+    background: var(--hsbc-grey-100);
+    color: var(--hsbc-black);
+}
+
+.view-btn.is-active {
+    background: var(--hsbc-red);
+    color: var(--hsbc-white);
+}
+
+/* Viewer shell */
+.viewer-shell {
+    background: var(--hsbc-white);
+    border: 1px solid var(--hsbc-grey-200);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+    position: relative;
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.viewer-caption {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--hsbc-grey-200);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: var(--hsbc-grey-600);
+    background: var(--hsbc-grey-050);
+    flex: 0 0 auto;
+}
+
+.viewer-caption b {
+    color: var(--hsbc-black);
+}
+
+perspective-viewer {
+    display: block;
+    width: 100%;
+    flex: 1 1 auto;
+    min-height: 0;
+    font-family: var(--font-stack);
+    color-scheme: light;
+}
+
+/* HSBC branding inside Perspective.
+   NOTE: pro.css only defines the d3fc chart variables under
+   `perspective-viewer[theme="Pro Light"]`, and the viewer does not keep that
+   attribute — so the variables never resolve and every d3fc chart crashes with
+   "Cannot read properties of null (reading 'opacity')". We therefore define the
+   full d3fc palette here. Custom properties inherit into the viewer's shadow
+   DOM, so the chart canvases pick these up. */
+perspective-viewer {
+    --plugin--background: #ffffff;
+    --active--color: #db0011;
+    --inactive--color: #999999;
+    --select--color: rgba(219, 0, 17, 0.14);
+    --rt-pos-cell--color: #00875a;
+    --rt-neg-cell--color: #db0011;
+    --block--background: #ffffff;
+    --header--background: #f2f2f2;
+
+    /* d3fc chart palette. */
+    --d3fc-series: rgba(219, 0, 17, 0.8);
+    --d3fc-series-1: #db0011;
+    --d3fc-series-2: #1a1a1a;
+    --d3fc-series-3: #666666;
+    --d3fc-series-4: #b5000e;
+    --d3fc-series-5: #333333;
+    --d3fc-gridline--color: #e0e0e0;
+    --d3fc-axis-ticks--color: #333333;
+    --d3fc-axis--lines: #c8c8c8;
+    --d3fc-legend--background: #ffffff;
+    --d3fc-tooltip--background: #1a1a1a;
+    --d3fc-tooltip--color: #ffffff;
+    --d3fc-full--gradient: linear-gradient(#b5000e 0%, #db0011 50%, #ffffff 100%);
+    --d3fc-positive--gradient: linear-gradient(#ffffff 0%, #00875a 100%);
+    --d3fc-negative--gradient: linear-gradient(#ffffff 0%, #db0011 100%);
+}
+
+perspective-viewer::part(plugin_selector),
+perspective-viewer {
+    --toolbar--background: #ffffff;
+}
+
+/* --------------------------------------------------------------------------
+   KPI side panel
+   -------------------------------------------------------------------------- */
+
+.side-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    min-height: 0;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.side-panel .card-head h2 {
+    font-size: 13px;
+}
+
+.kpi-list {
+    max-height: 40vh;
+    overflow-y: auto;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.kpi-item {
+    border: 1px solid var(--hsbc-grey-200);
+    border-left: 3px solid var(--hsbc-grey-300);
+    background: var(--hsbc-white);
+    border-radius: var(--radius);
+    padding: 10px 12px;
+    cursor: pointer;
+    transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+.kpi-item:hover {
+    background: var(--hsbc-grey-050);
+    border-left-color: var(--hsbc-black);
+}
+
+.kpi-item.is-selected {
+    border-left-color: var(--hsbc-red);
+    background: var(--hsbc-red-tint);
+}
+
+.kpi-item.has-issue {
+    border-left-color: var(--hsbc-red);
+}
+
+.kpi-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 5px;
+}
+
+.kpi-name {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--hsbc-black);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.kpi-meta {
+    display: flex;
+    gap: 10px;
+    font-size: 11px;
+    color: var(--hsbc-grey-600);
+    flex-wrap: wrap;
+}
+
+.kpi-meta b {
+    color: var(--hsbc-ink);
+}
+
+.kpi-meta .warn {
+    color: var(--hsbc-red);
+    font-weight: 700;
+}
+
+.kpi-detail {
+    padding: 14px 16px;
+    border-top: 1px solid var(--hsbc-grey-200);
+    background: var(--hsbc-grey-050);
+    font-size: 12.5px;
+}
+
+.kpi-detail dl {
+    margin: 0;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 5px 12px;
+}
+
+.kpi-detail dt {
+    color: var(--hsbc-grey-600);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    align-self: center;
+}
+
+.kpi-detail dd {
+    margin: 0;
+    font-weight: 700;
+    color: var(--hsbc-black);
+    text-align: right;
+    word-break: break-word;
+}
+
+.issue-list {
+    margin: 10px 0 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.issue-list li {
+    background: var(--hsbc-red-tint);
+    color: var(--hsbc-red-dark);
+    border-left: 3px solid var(--hsbc-red);
+    padding: 5px 9px;
+    font-size: 11.5px;
+    font-weight: 700;
+}
+
+.issue-list li.ok {
+    background: #eefaf3;
+    color: var(--hsbc-green);
+    border-left-color: var(--hsbc-green);
+}
+
+.panel-empty {
+    padding: 22px 16px;
+    text-align: center;
+    color: var(--hsbc-grey-400);
+    font-size: 12.5px;
+}
+
+/* --------------------------------------------------------------------------
+   AI chat
+   -------------------------------------------------------------------------- */
+
+.chat-fab {
+    position: fixed;
+    right: 26px;
+    bottom: 26px;
+    z-index: 60;
+    background: var(--hsbc-black);
+    color: var(--hsbc-white);
+    border: none;
+    border-radius: 40px;
+    padding: 13px 22px;
+    font-family: var(--font-stack);
+    font-size: 13.5px;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: var(--shadow-md);
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.chat-fab:hover {
+    background: var(--hsbc-red);
+    transform: translateY(-2px);
+}
+
+.chat-fab .spark {
+    color: var(--hsbc-red);
+    font-size: 15px;
+}
+
+.chat-fab:hover .spark {
+    color: var(--hsbc-white);
+}
+
+.chat-panel {
+    position: fixed;
+    right: 26px;
+    bottom: 26px;
+    z-index: 61;
+    width: 384px;
+    max-width: calc(100vw - 40px);
+    height: auto;
+    min-height: 380px;
+    max-height: calc(100vh - 64px);
+    background: var(--hsbc-white);
+    border-radius: 4px;
+    box-shadow: var(--shadow-lg);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border-top: 4px solid var(--hsbc-red);
+}
+
+.chat-head {
+    background: var(--hsbc-black);
+    color: var(--hsbc-white);
+    padding: 13px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.chat-head-title {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.25;
+}
+
+.chat-head-title b {
+    font-size: 14px;
+}
+
+.chat-head-title span {
+    font-size: 10.5px;
+    color: var(--hsbc-grey-400);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+}
+
+.chat-close {
+    background: transparent;
+    border: none;
+    color: var(--hsbc-white);
+    font-size: 21px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 2px 6px;
+    opacity: 0.7;
+}
+
+.chat-close:hover {
+    opacity: 1;
+    color: var(--hsbc-red);
+}
+
+/* BYO-model connection block ------------------------------------------- */
+.chat-config {
+    border-bottom: 1px solid var(--hsbc-grey-200);
+    background: var(--hsbc-white);
+    flex: 0 0 auto;
+}
+
+.chat-config > summary {
+    list-style: none;
+    cursor: pointer;
+    padding: 10px 16px;
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: var(--hsbc-grey-600);
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    user-select: none;
+}
+
+.chat-config > summary::-webkit-details-marker {
+    display: none;
+}
+
+.chat-config > summary:hover {
+    color: var(--hsbc-black);
+}
+
+.chat-config > summary::before {
+    content: "▸";
+    color: var(--hsbc-red);
+    transition: transform 0.15s ease;
+}
+
+.chat-config[open] > summary::before {
+    transform: rotate(90deg);
+}
+
+.chat-config-body {
+    padding: 2px 16px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: 34vh;
+    overflow-y: auto;
+}
+
+.chat-config-body .field label {
+    font-size: 10.5px;
+    margin-bottom: 5px;
+}
+
+.chat-config-body .field input {
+    padding: 8px 10px;
+    font-size: 12.5px;
+}
+
+.chat-config-body .help {
+    margin-top: 4px;
+    line-height: 1.4;
+}
+
+.chat-config-body code {
+    background: var(--hsbc-grey-100);
+    padding: 1px 4px;
+    font-size: 11px;
+}
+
+.chat-config-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.chat-body {
+    flex: 1 1 auto;
+    min-height: 70px;
+    overflow-y: auto;
+    padding: 16px;
+    background: var(--hsbc-grey-050);
+    display: flex;
+    flex-direction: column;
+    gap: 11px;
+}
+
+.msg {
+    max-width: 86%;
+    padding: 9px 13px;
+    border-radius: 4px;
+    font-size: 13px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+.msg-user {
+    align-self: flex-end;
+    background: var(--hsbc-black);
+    color: var(--hsbc-white);
+    border-bottom-right-radius: 0;
+}
+
+.msg-bot {
+    align-self: flex-start;
+    background: var(--hsbc-white);
+    border: 1px solid var(--hsbc-grey-200);
+    border-left: 3px solid var(--hsbc-red);
+    color: var(--hsbc-ink);
+    border-bottom-left-radius: 0;
+}
+
+.msg-typing {
+    align-self: flex-start;
+    color: var(--hsbc-grey-400);
+    font-size: 12px;
+    font-style: italic;
+    padding: 4px 6px;
+}
+
+.chat-foot {
+    border-top: 1px solid var(--hsbc-grey-200);
+    padding: 11px;
+    display: flex;
+    gap: 8px;
+    background: var(--hsbc-white);
+}
+
+.chat-foot input {
+    flex: 1;
+    font-family: var(--font-stack);
+    font-size: 13.5px;
+    padding: 10px 12px;
+    border: 1px solid var(--hsbc-grey-300);
+    border-radius: var(--radius);
+}
+
+.chat-foot input:focus {
+    outline: none;
+    border-color: var(--hsbc-red);
+    box-shadow: 0 0 0 2px rgba(219, 0, 17, 0.15);
+}
+
+.chat-send {
+    background: var(--hsbc-red);
+    color: var(--hsbc-white);
+    border: none;
+    border-radius: var(--radius);
+    padding: 0 17px;
+    font-family: var(--font-stack);
+    font-weight: 700;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.chat-send:hover {
+    background: var(--hsbc-red-dark);
+}
+
+.chat-hint {
+    font-size: 11px;
+    color: var(--hsbc-grey-400);
+    padding: 0 13px 10px;
+    background: var(--hsbc-white);
+}
+
+/* --------------------------------------------------------------------------
+   Responsive
+   -------------------------------------------------------------------------- */
+
+@media (max-width: 1080px) {
+    body.page-dashboard {
+        height: auto;
+        overflow: auto;
+    }
+
+    .dash-layout {
+        grid-template-columns: minmax(0, 1fr);
+        overflow: visible;
+    }
+
+    .dash-main {
+        overflow: visible;
+    }
+
+    .viewer-shell {
+        min-height: 520px;
+    }
+
+    .side-panel {
+        overflow: visible;
+        padding-right: 0;
+    }
+
+    .kpi-list {
+        max-height: 320px;
+    }
+}
+
+@media (max-width: 720px) {
+    .page {
+        padding: 22px 14px 60px;
+    }
+
+    .dash-layout {
+        padding: 14px 14px 96px;
+    }
+
+    .page-intro h1 {
+        font-size: 23px;
+    }
+
+    .brand-tag {
+        display: none;
+    }
+
+    .brand-logo {
+        height: 32px;
+    }
+
+    .viewer-shell {
+        min-height: 440px;
+    }
+}

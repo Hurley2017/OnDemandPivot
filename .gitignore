@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# PyInstaller build output
+build/
+dist/
+*.spec
+
+# Runtime uploads written by the app
+uploads/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
