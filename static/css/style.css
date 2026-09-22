@@ -159,6 +159,39 @@ a:hover {
     gap: 12px;
 }
 
+/* Two-line right block: file name + metadata, then the primary action. */
+.header-actions-stacked {
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 6px;
+}
+
+.dataset-meta {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    line-height: 1.25;
+    text-align: right;
+    max-width: 46vw;
+}
+
+.dataset-file {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--hsbc-black);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+}
+
+.dataset-sub {
+    font-size: 11px;
+    color: var(--hsbc-grey-600);
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+}
+
 .dataset-pill {
     font-size: 12px;
     color: var(--hsbc-grey-600);
@@ -478,6 +511,227 @@ a:hover {
     margin: 22px 0 10px;
     padding-bottom: 7px;
     border-bottom: 1px solid var(--hsbc-grey-200);
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+}
+
+.section-hint {
+    font-size: 10.5px;
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: 0.02em;
+    color: var(--hsbc-grey-400);
+}
+
+.preview-state {
+    margin-left: auto;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: var(--hsbc-grey-100);
+    color: var(--hsbc-grey-600);
+}
+
+.preview-state.is-busy {
+    background: #fff7e6;
+    color: #a05a00;
+}
+
+.preview-state.is-ok {
+    background: #eefaf3;
+    color: var(--hsbc-green);
+}
+
+.preview-state.is-bad {
+    background: var(--hsbc-red-tint);
+    color: var(--hsbc-red);
+}
+
+/* ---------------------------------------------------------- option groups */
+
+.opt-group {
+    border-top: 1px solid var(--hsbc-grey-200);
+    padding-top: 4px;
+    margin-top: 18px;
+}
+
+.opt-group:first-child {
+    border-top: none;
+    margin-top: 0;
+}
+
+.opt-group > .section-label {
+    margin-top: 12px;
+}
+
+details.opt-group > summary {
+    list-style: none;
+    cursor: pointer;
+    user-select: none;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--hsbc-grey-600);
+    margin: 12px 0 0;
+    padding-bottom: 7px;
+    border-bottom: 1px solid var(--hsbc-grey-200);
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+}
+
+details.opt-group > summary::-webkit-details-marker {
+    display: none;
+}
+
+details.opt-group > summary::before {
+    content: "▸";
+    color: var(--hsbc-red);
+    transition: transform 0.15s ease;
+}
+
+details.opt-group[open] > summary::before {
+    transform: rotate(90deg);
+}
+
+details.opt-group > summary:hover {
+    color: var(--hsbc-black);
+}
+
+details.opt-group[open] > summary {
+    margin-bottom: 12px;
+}
+
+.replace-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.replace-row span {
+    color: var(--hsbc-grey-400);
+    font-weight: 700;
+}
+
+/* ------------------------------------------------------------------ toasts */
+
+.toast-host {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    z-index: 200;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-width: min(440px, calc(100vw - 32px));
+    pointer-events: none;
+}
+
+.toast {
+    pointer-events: auto;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    background: var(--hsbc-white);
+    border: 1px solid var(--hsbc-grey-200);
+    border-left: 4px solid var(--hsbc-grey-400);
+    box-shadow: var(--shadow-md);
+    border-radius: var(--radius);
+    padding: 11px 12px;
+    font-size: 13px;
+    line-height: 1.45;
+    color: var(--hsbc-ink);
+    animation: toast-in 0.18s ease-out;
+}
+
+.toast-out {
+    opacity: 0;
+    transform: translateX(12px);
+    transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+@keyframes toast-in {
+    from {
+        opacity: 0;
+        transform: translateX(14px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+.toast-icon {
+    flex: 0 0 auto;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--hsbc-white);
+    background: var(--hsbc-grey-600);
+    margin-top: 1px;
+}
+
+.toast-text {
+    flex: 1 1 auto;
+    word-break: break-word;
+}
+
+.toast-close {
+    flex: 0 0 auto;
+    background: transparent;
+    border: none;
+    color: var(--hsbc-grey-400);
+    font-size: 17px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 2px;
+}
+
+.toast-close:hover {
+    color: var(--hsbc-black);
+}
+
+.toast-error {
+    border-left-color: var(--hsbc-red);
+    background: #fffafa;
+}
+
+.toast-error .toast-icon {
+    background: var(--hsbc-red);
+}
+
+.toast-success {
+    border-left-color: var(--hsbc-green);
+}
+
+.toast-success .toast-icon {
+    background: var(--hsbc-green);
+}
+
+.toast-warn {
+    border-left-color: #a05a00;
+}
+
+.toast-warn .toast-icon {
+    background: #a05a00;
+}
+
+.toast-info {
+    border-left-color: #0b5394;
+}
+
+.toast-info .toast-icon {
+    background: #0b5394;
 }
 
 table.data {
@@ -579,7 +833,9 @@ table.data td.null {
     align-items: start;
 }
 
-.field label {
+/* Direct child only: checkbox rows (.check) are <label>s too and must keep
+   their normal sentence case. */
+.field > label {
     display: block;
     font-size: 11px;
     font-weight: 700;
@@ -587,6 +843,11 @@ table.data td.null {
     letter-spacing: 0.09em;
     color: var(--hsbc-grey-600);
     margin-bottom: 7px;
+}
+
+.field > label .tag {
+    margin-left: 6px;
+    vertical-align: middle;
 }
 
 .field input[type="number"],
@@ -741,6 +1002,14 @@ body.page-dashboard .app-header {
     position: static;
 }
 
+/* The stacked file-meta block needs a little more room than the upload page. */
+body.page-dashboard .app-header {
+    height: auto;
+    min-height: 76px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+}
+
 body.page-dashboard #loadError {
     flex: 0 0 auto;
     margin: 12px 20px 0;
@@ -816,6 +1085,10 @@ body.page-dashboard #loadError {
     width: 1px;
     height: 26px;
     background: var(--hsbc-grey-200);
+}
+
+.toolbar-end {
+    margin-left: auto;
 }
 
 /* View switcher */
@@ -950,6 +1223,30 @@ perspective-viewer {
 
 .side-panel .card-head h2 {
     font-size: 13px;
+}
+
+/* Dataset summary: denser tiles so the extra measures fit the side panel. */
+.stat-grid-tight {
+    grid-template-columns: repeat(auto-fit, minmax(126px, 1fr));
+    gap: 10px;
+}
+
+.stat-grid-tight .stat {
+    padding: 10px 12px;
+    border-left-width: 3px;
+}
+
+.stat-grid-tight .stat-value {
+    font-size: 19px;
+}
+
+.stat-grid-tight .stat-label {
+    font-size: 10px;
+    margin-bottom: 4px;
+}
+
+.stat-grid-tight .stat-hint {
+    font-size: 10.5px;
 }
 
 .kpi-list {

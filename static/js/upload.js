@@ -3,41 +3,17 @@
     "use strict";
 
     const $ = (id) => document.getElementById(id);
+    const toast = (msg, kind) => window.CPA.toast(msg, kind);
+    const escapeHtml = window.CPA.escapeHtml;
 
     const dropzone = $("dropzone");
     const fileInput = $("fileInput");
-    const alertBox = $("alert");
     const profileCard = $("profileCard");
     const previewCard = $("previewCard");
 
     let busy = false;
     let previewTimer = null;
-
-    /* ---------------------------------------------------------------- utils */
-
-    function showError(message) {
-        alertBox.textContent = message;
-        alertBox.hidden = false;
-    }
-
-    function clearError() {
-        alertBox.hidden = true;
-        alertBox.textContent = "";
-    }
-
-    function setBusy(button, on) {
-        button.disabled = on;
-        button.dataset.label = button.dataset.label || button.innerHTML;
-        button.innerHTML = on ? '<span class="spinner"></span> Working…' : button.dataset.label;
-    }
-
-    function escapeHtml(value) {
-        return String(value == null ? "" : value)
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;")
-            .replace(/"/g, "&quot;");
-    }
+    let previewSeq = 0;
 
     const KIND_BADGE = {
         number: "badge-number",
@@ -48,24 +24,81 @@
         timedelta: "badge-datetime",
     };
 
+    /* ------------------------------------------------------------ options */
+
+    const NUMBER_FIELDS = ["skipRows", "skipCols", "skipLastRows", "skipLastCols",
+                           "maxMissing", "roundDecimals"];
+    const BOOL_FIELDS = ["optHasHeader", "optPromote", "optTranspose",
+                         "optStrip", "optDropRows", "optDropRowsNull", "optDedupe",
+                         "optDropCols", "optConstantCols", "optDuplicateCols",
+                         "optNormalizeCols", "optCoerceNumbers", "sortDesc"];
+    const SELECT_FIELDS = ["textCase", "fillMissing", "dedupeKeep", "sortBy"];
+    const TEXT_FIELDS = ["dataRange", "dropCols", "replaceFind", "replaceWith"];
+
+    /* id -> backend option name */
+    const OPTION_MAP = {
+        skipRows: "skip_rows",
+        skipCols: "skip_cols",
+        skipLastRows: "skip_last_rows",
+        skipLastCols: "skip_last_cols",
+        dataRange: "data_range",
+        optHasHeader: "has_header",
+        optPromote: "promote_first_row",
+        optTranspose: "transpose",
+        optStrip: "strip_whitespace",
+        optDropRows: "drop_empty_rows",
+        optDropRowsNull: "drop_rows_with_null",
+        optDedupe: "dedupe",
+        dedupeKeep: "dedupe_keep",
+        sortBy: "sort_by",
+        sortDesc: "sort_desc",
+        optDropCols: "drop_empty_cols",
+        optConstantCols: "drop_constant_cols",
+        optDuplicateCols: "drop_duplicate_cols",
+        maxMissing: "max_missing_pct",
+        dropCols: "drop_cols",
+        optNormalizeCols: "normalize_col_names",
+        textCase: "text_case",
+        optCoerceNumbers: "coerce_numbers",
+        fillMissing: "fill_missing",
+        roundDecimals: "round_decimals",
+        replaceFind: "replace_find",
+        replaceWith: "replace_with",
+    };
+
     function readOptions() {
-        return {
-            skip_rows: parseInt($("skipRows").value, 10) || 0,
-            skip_cols: parseInt($("skipCols").value, 10) || 0,
-            data_range: ($("dataRange").value || "").trim(),
-            strip_whitespace: $("optStrip").checked,
-            drop_empty_rows: $("optDropRows").checked,
-            drop_empty_cols: $("optDropCols").checked,
-            dedupe: $("optDedupe").checked,
-        };
+        const payload = {};
+        NUMBER_FIELDS.forEach((id) => {
+            const raw = parseInt($(id).value, 10);
+            payload[OPTION_MAP[id]] = Number.isFinite(raw) ? raw : 0;
+        });
+        BOOL_FIELDS.forEach((id) => {
+            payload[OPTION_MAP[id]] = $(id).checked;
+        });
+        SELECT_FIELDS.forEach((id) => {
+            payload[OPTION_MAP[id]] = $(id).value;
+        });
+        TEXT_FIELDS.forEach((id) => {
+            payload[OPTION_MAP[id]] = ($(id).value || "").trim();
+        });
+        return payload;
     }
 
-    /* Put every restructuring control back to its default state. */
-    function applyOptionDefaults(options) {
+    /** Put every restructuring control back to the server's defaults. */
+    function applyOptions(options) {
         const opts = options || {};
-        $("skipRows").value = opts.skip_rows || 0;
-        $("skipCols").value = opts.skip_cols || 0;
-        $("dataRange").value = opts.data_range || "";
+        Object.keys(OPTION_MAP).forEach((id) => {
+            const el = $(id);
+            if (!el) return;
+            const value = opts[OPTION_MAP[id]];
+            if (el.type === "checkbox") {
+                el.checked = value !== undefined ? Boolean(value) : el.defaultChecked;
+            } else if (value !== undefined && value !== null) {
+                el.value = value;
+            } else {
+                el.value = el.defaultValue;
+            }
+        });
     }
 
     async function postJSON(url, payload) {
@@ -78,7 +111,7 @@
         try {
             data = await resp.json();
         } catch (err) {
-            throw new Error("Server returned an unreadable response.");
+            throw new Error("The server returned an unreadable response.");
         }
         if (!resp.ok || !data.success) {
             throw new Error((data && data.error) || "Request failed.");
@@ -86,11 +119,11 @@
         return data;
     }
 
-    /* ------------------------------------------------------------ rendering */
+    /* ---------------------------------------------------------- rendering */
 
     function renderStats(profile) {
         const tiles = [
-            { label: "Rows", value: profile.rows, hint: "after cleaning" },
+            { label: "Rows", value: profile.rows, hint: "after restructuring" },
             { label: "Columns", value: profile.cols, hint: "KPIs detected" },
             {
                 label: "Missing cells",
@@ -158,6 +191,20 @@
         $("profileTag").textContent = profile.flagged_fields
             ? `${profile.flagged_fields} column(s) flagged`
             : "No anomalies detected";
+
+        fillColumnSelects(profile.fields.map((f) => f.name));
+    }
+
+    /** Keep the column-dependent selects in step with the current frame. */
+    function fillColumnSelects(names) {
+        const sortBy = $("sortBy");
+        const current = sortBy.value;
+        sortBy.innerHTML =
+            '<option value="">— leave as-is —</option>' +
+            names
+                .map((n) => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`)
+                .join("");
+        if (names.includes(current)) sortBy.value = current;
     }
 
     function renderPreview(preview) {
@@ -169,7 +216,7 @@
             .join("");
 
         if (!preview.records.length) {
-            tbody.innerHTML = `<tr><td class="null" colspan="${preview.fields.length || 1}">No rows to display.</td></tr>`;
+            tbody.innerHTML = `<tr><td class="null" colspan="${preview.fields.length || 1}">No rows to display — every row was filtered out. Relax the row options.</td></tr>`;
         } else {
             tbody.innerHTML = preview.records
                 .map((row) => {
@@ -192,7 +239,7 @@
         }
 
         $("previewCount").textContent =
-            `showing ${preview.shown} of ${preview.total} rows`;
+            `— showing ${preview.shown} of ${preview.total} rows`;
         $("previewTag").textContent = `${preview.total} rows × ${preview.fields.length} cols`;
         $("footSummary").textContent =
             `${preview.total} rows ready — click “Process data” to open the dashboard.`;
@@ -208,6 +255,11 @@
 
     /* --------------------------------------------------------- upload flow */
 
+    function setNavMeta(name, text) {
+        $("navFile").textContent = name || "No dataset loaded";
+        $("navMeta").textContent = text || "";
+    }
+
     async function uploadBlob(blob, name) {
         $("fileMeta").hidden = false;
         $("fileMeta").innerHTML =
@@ -222,24 +274,34 @@
             throw new Error(data.error || "Upload failed.");
         }
         // Each new file starts from the server's default restructuring state.
-        applyOptionDefaults(data.options);
+        applyOptions(data.options);
         renderAll(data);
+        const shown = (data.profile && data.profile.filename) || name;
+        setNavMeta(
+            shown,
+            `${data.profile.rows} rows × ${data.profile.cols} cols · ` +
+                `${data.profile.flagged_fields} flagged`
+        );
+        toast(
+            `Loaded ${shown} — ${data.profile.rows} rows × ` +
+                `${data.profile.cols} columns.`,
+            "success"
+        );
     }
 
     async function handleFile(file) {
         if (!file) return;
-        clearError();
 
         const ext = (file.name.split(".").pop() || "").toLowerCase();
         if (ext !== "csv" && ext !== "xlsx") {
-            showError("Unsupported file type. Please choose a .csv or .xlsx file.");
+            toast("Unsupported file type. Please choose a .csv or .xlsx file.", "error");
             return;
         }
 
         try {
             await uploadBlob(file, file.name);
         } catch (err) {
-            showError(err.message);
+            toast(err.message, "error");
         }
     }
 
@@ -247,7 +309,6 @@
     async function loadSample() {
         const btn = $("sampleBtn");
         if (btn.disabled) return;
-        clearError();
         btn.disabled = true;
         const label = btn.innerHTML;
         btn.innerHTML = '<span class="spinner"></span> Loading…';
@@ -267,28 +328,43 @@
             const blob = await resp.blob();
             await uploadBlob(blob, name);
         } catch (err) {
-            showError(err.message);
+            toast(err.message, "error");
         } finally {
             btn.disabled = false;
             btn.innerHTML = label;
         }
     }
 
-    /* Debounced re-profile whenever a restructuring control changes. */
-    async function schedulePreview() {
-        if (!profileCard.hidden) {
-            clearTimeout(previewTimer);
-            previewTimer = setTimeout(refreshPreview, 320);
-        }
+    /* ------------------------------------------------------ live preview */
+
+    function setPreviewState(text, kind) {
+        const el = $("previewState");
+        el.hidden = false;
+        el.textContent = text;
+        el.className = "preview-state" + (kind ? " is-" + kind : "");
+    }
+
+    function schedulePreview() {
+        if (profileCard.hidden) return;
+        setPreviewState("updating…", "busy");
+        clearTimeout(previewTimer);
+        previewTimer = setTimeout(refreshPreview, 350);
     }
 
     async function refreshPreview() {
+        const seq = ++previewSeq;
         try {
             const data = await postJSON("/preview", readOptions());
-            clearError();
+            if (seq !== previewSeq) return; // a newer edit already won
             renderAll(data);
+            setPreviewState("updated", "ok");
+            setTimeout(() => {
+                if (seq === previewSeq) $("previewState").hidden = true;
+            }, 1400);
         } catch (err) {
-            showError(err.message);
+            if (seq !== previewSeq) return;
+            setPreviewState("failed", "bad");
+            toast(err.message, "error");
         }
     }
 
@@ -328,38 +404,41 @@
         fileInput.value = "";
     });
 
-    // Re-profile on any control change (debounced).
-    ["skipRows", "skipCols", "dataRange"].forEach((id) =>
-        $(id).addEventListener("input", schedulePreview)
+    // Re-profile on any control change. Both `input` and `change` are wired so
+    // typing, spinners, paste and programmatic edits all refresh the preview.
+    NUMBER_FIELDS.concat(TEXT_FIELDS).forEach((id) =>
+        ["input", "change"].forEach((evt) =>
+            $(id).addEventListener(evt, schedulePreview)
+        )
     );
-    ["optStrip", "optDropRows", "optDropCols", "optDedupe"].forEach((id) =>
+    BOOL_FIELDS.concat(SELECT_FIELDS).forEach((id) =>
         $(id).addEventListener("change", schedulePreview)
     );
 
     $("sampleBtn").addEventListener("click", loadSample);
 
     $("resetBtn").addEventListener("click", () => {
-        profileCard.hidden = true;
-        previewCard.hidden = true;
-        $("fileMeta").hidden = true;
-        applyOptionDefaults(null);
-        clearError();
-        window.scrollTo({ top: 0, behavior: "smooth" });
+        applyOptions(null);
+        clearTimeout(previewTimer);
+        schedulePreview();
+        toast("Restructuring options reset to their defaults.", "info");
     });
 
     $("processBtn").addEventListener("click", async () => {
         const btn = $("processBtn");
         if (busy) return;
         busy = true;
-        setBusy(btn, true);
-        clearError();
+        const label = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span> Processing…';
         try {
             const data = await postJSON("/process", readOptions());
             window.location.href = data.url || "/dashboard";
         } catch (err) {
-            showError(err.message);
+            toast(err.message, "error");
             busy = false;
-            setBusy(btn, false);
+            btn.disabled = false;
+            btn.innerHTML = label;
         }
     });
 })();

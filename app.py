@@ -8,6 +8,7 @@ Run packaged:        double-click OnDemandPivot.exe (starts server + opens brows
 """
 
 import csv
+import io
 import json
 import math
 import os
@@ -59,12 +60,26 @@ app = Flask(
 )
 app.config["MAX_CONTENT_LENGTH"] = 100 * 1024 * 1024  # 100 MB upload cap
 app.config["SECRET_KEY"] = "ondemandpivot-local-only"
+# Never let a browser serve a stale stylesheet/script after an update.
+app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
+
+
+def asset_version(filename: str) -> str:
+    """File mtime used as a cache-busting query string in the templates."""
+    try:
+        return str(int(os.path.getmtime(os.path.join(STATIC_DIR, filename))))
+    except OSError:
+        return "0"
+
+
+app.jinja_env.globals["asset_version"] = asset_version
 
 # In-memory session store for the uploaded dataframe and its column profile.
 # Single-user, local app -> a module-level dict is sufficient (no DB needed).
 SESSION_DATA = {
     "path": None,          # path of the uploaded file on disk
-    "filename": None,
+    "filename": None,      # filesystem-safe name used on disk
+    "display_name": None,  # the name the user actually picked
     "raw_df": None,        # as-parsed (after skip-rows + name normalisation)
     "df": None,            # cleaned frame after restructuring options
     "processed_df": None,  # final frame handed to Perspective
@@ -157,26 +172,47 @@ def _col_letters_to_index(letters: str) -> int:
     return n - 1
 
 
-_RANGE_RE = re.compile(
-    r"^\s*\$?([A-Z]{1,3})\$?(\d{1,7})\s*:\s*\$?([A-Z]{1,3})\$?(\d{1,7})\s*$",
-    re.IGNORECASE,
-)
+# One side of a range: optional column letters, optional row number, each with
+# an optional '$' anchor.  "B3", "B", "3" and "" are all valid sides, so the
+# parser accepts Excel's open-ended forms: A:C, 2:5, B3:H, A1:.
+_RANGE_SIDE_RE = re.compile(r"^\s*\$?([A-Z]{1,3})?\$?(\d{1,7})?\s*$", re.IGNORECASE)
+_RANGE_RE = re.compile(r"^(.*?):(.*)$")
 
 # Excel serial day 1 = 1900-01-01, 2958465 = 9999-12-31.
 _EXCEL_SERIAL_MAX = 2958465
 
 
-def _parse_range(spec: str) -> dict:
-    """
-    Parse an Excel-style range such as 'B3:H500' for power users who already
-    know where their table lives.
+def _parse_range_side(side: str):
+    """Split one side of a range into (column_index, row_number), either may be None."""
+    match = _RANGE_SIDE_RE.match(side or "")
+    if not match:
+        return None
+    letters, digits = match.groups()
+    col = _col_letters_to_index(letters) if letters else None
+    row = int(digits) if digits else None
+    return col, row
 
-    Returns a dict describing the block, or raises ValueError with a message
-    the UI can show verbatim:
+
+def _parse_range(spec: str, skip_rows: int = 0) -> dict:
+    """
+    Parse an Excel-style range for power users who already know where their
+    table lives.
+
+    Both sides may omit the column letters, the row number, or both, so all of
+    Excel's shapes work:
+
+        A1:D6    bounded block
+        A:C      columns A..C, header on the first row (or skip-rows)
+        B3:H     columns B..H, header on row 3, to the end of the sheet
+        2:5      rows 2..5, every column
+        B3       a single cell / column starting at row 3
+
+    Returns a dict, or raises ValueError with a message the UI shows verbatim:
         header_row  0-based row index of the header line
         start_col   0-based first column index (inclusive)
-        end_col     0-based last column index (inclusive)
-        nrows       data rows to read after the header, or None
+        end_col     0-based last column index (inclusive), None = last column
+        nrows       data rows to read after the header, or None = all
+        row_bounded whether the range pinned any row information
     """
     text = (spec or "").strip()
     if not text:
@@ -184,46 +220,84 @@ def _parse_range(spec: str) -> dict:
 
     match = _RANGE_RE.match(text)
     if not match:
+        # A bare cell such as "B3": one column, header on that row, all rows
+        # below it. "B" alone means column B with the usual header row.
+        side = _parse_range_side(text)
+        if side is None or side == (None, None):
+            raise ValueError(
+                f"Range '{text}' is not valid. Use Excel notation such as "
+                "B3:H500, A:C or 2:5."
+            )
+        col, row = side
+        return {
+            "header_row": max(0, (row or 1) - 1) if row else max(0, int(skip_rows or 0)),
+            "start_col": 0 if col is None else col,
+            "end_col": 0 if col is None else col,
+            "nrows": None,
+            "row_bounded": row is not None,
+        }
+
+    left, right = match.groups()
+
+    a = _parse_range_side(left)
+    b = _parse_range_side(right)
+    if a is None or b is None or (a == (None, None) and b == (None, None)):
         raise ValueError(
-            f"Range '{text}' is not valid. Use Excel notation like B3:H500."
+            f"Range '{text}' is not valid. Use Excel notation such as "
+            "B3:H500, A:C or 2:5."
         )
 
-    c1, r1, c2, r2 = match.groups()
-    start_col = _col_letters_to_index(c1)
-    end_col = _col_letters_to_index(c2)
-    start_row = int(r1) - 1  # Excel rows are 1-based; row 1 is the header
-    end_row = int(r2) - 1
+    (col_a, row_a), (col_b, row_b) = a, b
 
-    if start_col > end_col:
-        start_col, end_col = end_col, start_col
-    if start_row > end_row:
-        raise ValueError(
-            f"Range '{text}' ends above where it starts (row {r1} > row {r2})."
-        )
+    # Columns: either bound may be omitted -> open on that side.
+    if col_a is None and col_b is None:
+        start_col, end_col = 0, None
+    else:
+        start_col = 0 if col_a is None else col_a
+        end_col = start_col if col_b is None else col_b
+        if start_col > end_col:  # tolerate a right-to-left drag
+            start_col, end_col = end_col, start_col
+
+    # Rows: Excel row 1 is the header line for our purposes.
+    row_bounded = row_a is not None or row_b is not None
+    if not row_bounded:
+        header_row = max(0, int(skip_rows or 0))
+        nrows = None
+    else:
+        header_row = max(0, (row_a or 1) - 1)
+        if row_b is None:
+            nrows = None
+        else:
+            last_row = max(row_a or 1, row_b) - 1
+            nrows = max(0, last_row - header_row)
 
     return {
-        "header_row": start_row,
+        "header_row": header_row,
         "start_col": start_col,
         "end_col": end_col,
-        # Rows after the header, inclusive of the end row.
-        "nrows": end_row - start_row,
+        "nrows": nrows,
+        "row_bounded": row_bounded,
     }
 
 
 def _read_csv_tolerant(
-    path: str, skip_rows: int, nrows: int | None = None
+    path: str, skip_rows: int, nrows: int | None = None, header: bool = True
 ) -> pd.DataFrame:
     """
     Fallback parser for CSVs that defeat `pd.read_csv`'s header inference:
     banner/title rows above the header, a non-comma delimiter, or ragged
     rows. Re-read from the detected header line with bad rows skipped.
     """
-    header_idx, delim = _detect_header(path, skip_rows)
+    header_idx = skip_rows
+    delim = ","
+    if header:
+        header_idx, delim = _detect_header(path, skip_rows)
     return pd.read_csv(
         path,
         sep=delim,
         skiprows=header_idx,
         nrows=None if nrows is None else nrows,
+        header=0 if header else None,
         low_memory=False,
         on_bad_lines="skip",
     )
@@ -234,45 +308,61 @@ def _read_file(
     skip_rows: int = 0,
     skip_cols: int = 0,
     data_range: str = "",
+    has_header: bool = True,
 ) -> pd.DataFrame:
     """
     Parse the stored upload.
 
-    Three independent controls, in precedence order:
-      data_range  Excel notation like 'B3:H500' - when given it defines the
-                  header row, the column block and the row limit itself.
+    Controls, in precedence order:
+      data_range  Excel notation ('B3:H500', 'A:C', '2:5') - when given it
+                  defines the header row, the column block and the row limit.
       skip_rows   rows to drop above the header (only if no range given)
       skip_cols   columns to drop from the left of whatever was read
+      has_header  when False the first row is data and columns are auto-named
     """
     skip_rows = max(0, int(skip_rows or 0))
     skip_cols = max(0, int(skip_cols or 0))
+    has_header = True if has_header is None else bool(has_header)
 
     spec = None
     if (data_range or "").strip():
-        spec = _parse_range(data_range)
-        # A range states its own header position, so it supersedes skip_rows.
-        skip_rows = spec["header_row"]
+        spec = _parse_range(data_range, skip_rows)
+        # A range that names rows states its own header position.
+        if spec["row_bounded"]:
+            skip_rows = spec["header_row"]
     nrows = spec["nrows"] if spec else None
+
+    # Without a header row the range's first row is data, not the header.
+    if not has_header and spec is not None and spec["row_bounded"]:
+        nrows = None if nrows is None else nrows + 1
 
     ext = os.path.splitext(path)[1].lower()
 
     if ext == ".xlsx":
         df = pd.read_excel(
-            path, skiprows=skip_rows, nrows=nrows, engine="openpyxl"
+            path,
+            skiprows=skip_rows,
+            nrows=nrows,
+            header=0 if has_header else None,
+            engine="openpyxl",
         )
     elif ext == ".csv":
         try:
             df = pd.read_csv(
-                path, skiprows=skip_rows, nrows=nrows, low_memory=False
+                path,
+                skiprows=skip_rows,
+                nrows=nrows,
+                header=0 if has_header else None,
+                low_memory=False,
             )
             # A lone column usually means the delimiter was guessed wrong
             # rather than a genuinely single-column file, so retry the sniffer.
             if df.shape[1] > 1:
                 pass
             else:
-                df = _read_csv_tolerant(path, skip_rows, nrows)
+                df = _read_csv_tolerant(path, skip_rows, nrows, has_header)
         except (pd.errors.ParserError, pd.errors.EmptyDataError, UnicodeError):
-            df = _read_csv_tolerant(path, skip_rows, nrows)
+            df = _read_csv_tolerant(path, skip_rows, nrows, has_header)
     else:
         raise ValueError(f"Unsupported file type: {ext}")
 
@@ -280,48 +370,290 @@ def _read_file(
     # Applied after the read because pandas' integer `usecols` semantics
     # relative to `skiprows` are ambiguous - iloc is unambiguous.
     if spec is not None:
-        end_col = min(spec["end_col"] + 1, len(df.columns))
+        end_col = (
+            len(df.columns)
+            if spec["end_col"] is None
+            else min(spec["end_col"] + 1, len(df.columns))
+        )
         df = df.iloc[:, spec["start_col"]:end_col]
     if skip_cols:
         df = df.iloc[:, skip_cols:]
+
+    if not has_header:
+        # Auto-name the columns and make sure the frame is rectangular.
+        df = df.reset_index(drop=True)
+        df.columns = [f"Column {i + 1}" for i in range(df.shape[1])]
 
     return _normalize_columns(df)
 
 
 DEFAULT_OPTIONS = {
+    # -- structure ---------------------------------------------------------
     "skip_rows": 0,
     "skip_cols": 0,
+    "skip_last_rows": 0,
+    "skip_last_cols": 0,
     "data_range": "",
-    "strip_whitespace": True,
+    "has_header": True,
+    "promote_first_row": False,
+    "transpose": False,
+    # -- rows --------------------------------------------------------------
     "drop_empty_rows": True,
-    "drop_empty_cols": True,
+    "drop_rows_with_null": False,
     "dedupe": True,
+    "dedupe_keep": "first",
+    "sort_by": "",
+    "sort_desc": False,
+    # -- columns -----------------------------------------------------------
+    "drop_empty_cols": True,
+    "drop_constant_cols": False,
+    "drop_duplicate_cols": False,
+    "max_missing_pct": 0.0,
+    "drop_cols": "",
+    "normalize_col_names": False,
+    # -- values ------------------------------------------------------------
+    "strip_whitespace": True,
+    "text_case": "none",
+    "coerce_numbers": False,
+    "fill_missing": "none",
+    "round_decimals": -1,
+    "replace_find": "",
+    "replace_with": "",
 }
 
 
+def _is_text_series(series: pd.Series) -> bool:
+    return (
+        series.dtype == object
+        or isinstance(series.dtype, pd.StringDtype)
+        or pd.api.types.is_string_dtype(series.dtype)
+    )
+
+
+def _text_columns(df: pd.DataFrame) -> list:
+    return [c for c in df.columns if _is_text_series(df[c])]
+
+
+def _numeric_columns(df: pd.DataFrame) -> list:
+    return [
+        c
+        for c in df.columns
+        if pd.api.types.is_numeric_dtype(df[c])
+        and not pd.api.types.is_bool_dtype(df[c])
+    ]
+
+
+def _coerce_numeric_text(series: pd.Series) -> pd.Series:
+    """
+    Turn text-encoded numbers into real numbers.
+
+    Handles currency symbols, thousands separators, surrounding spaces,
+    accounting negatives ("(1,234.50)") and trailing percent signs. The column
+    is only converted when at least 90% of its values parse, so free text is
+    never mangled.
+    """
+    if not _is_text_series(series):
+        return series
+    non_null = series.dropna().astype(str).str.strip()
+    if not len(non_null):
+        return series
+
+    looks_numeric = non_null.str.match(r"^\$?\s*-?\(?[\d,.\s]+\)?%?$", na=False)
+    if float(looks_numeric.mean()) < 0.9:
+        return series
+
+    cleaned = (
+        series.astype(str)
+        .str.strip()
+        .str.replace(r"[$£€¥\s]", "", regex=True)
+        .str.replace(r"^\((.*)\)$", r"-\1", regex=True)
+        .str.replace(r"%$", "", regex=True)
+    )
+    converted = pd.to_numeric(cleaned, errors="coerce")
+    if float(converted.notna().sum()) < len(non_null) * 0.9:
+        return series
+    return converted
+
+
+def _snake_name(name: str) -> str:
+    """'Gross Sales ($)' -> 'gross_sales'."""
+    text = str(name).strip().lower()
+    text = re.sub(r"[^\w\s-]", "", text)
+    text = re.sub(r"[\s\-]+", "_", text)
+    text = re.sub(r"_+", "_", text).strip("_")
+    return text or "column"
+
+
 def _apply_options(df: pd.DataFrame, options: dict) -> pd.DataFrame:
-    """Apply the user-facing restructuring/cleaning toggles to a parsed frame."""
+    """
+    Apply the user-facing restructuring/cleaning toggles to a parsed frame.
+
+    Order is deliberate: structure first, then columns, then values, then rows,
+    then sorting - so each stage sees a frame the user would recognise.
+    """
     opts = {**DEFAULT_OPTIONS, **(options or {})}
+    if df is None or df.shape[1] == 0:
+        return df
 
-    if opts.get("strip_whitespace"):
-        for col in df.columns:
-            if df[col].dtype == object or isinstance(
-                df[col].dtype, pd.StringDtype
-            ):
-                s = df[col]
-                # Only strip genuine strings; leave everything else untouched.
-                mask = s.map(lambda v: isinstance(v, str))
-                if mask.any():
-                    df.loc[mask, col] = s[mask].str.strip()
+    # ---------------------------------------------------------- structure
+    if opts.get("transpose"):
+        df = df.T.reset_index(drop=True)
+        df.columns = [f"Column {i + 1}" for i in range(df.shape[1])]
 
-    if opts.get("drop_empty_rows"):
-        df = df.dropna(how="all")
+    last_rows = max(0, int(opts.get("skip_last_rows") or 0))
+    if last_rows:
+        df = df.iloc[: max(0, len(df) - last_rows)]
+
+    last_cols = max(0, int(opts.get("skip_last_cols") or 0))
+    if last_cols:
+        df = df.iloc[:, : max(0, df.shape[1] - last_cols)]
+
+    if opts.get("promote_first_row") and len(df):
+        df.columns = [str(v) for v in df.iloc[0]]
+        df = df.iloc[1:]
+        df = _normalize_columns(df.reset_index(drop=True))
+
+    if df.shape[1] == 0:
+        return df
+
+    # ------------------------------------------------------------ columns
+    drop_cols = [
+        c.strip()
+        for c in re.split(r"[,\n;]", str(opts.get("drop_cols") or ""))
+        if c.strip()
+    ]
+    if drop_cols:
+        wanted = {c.lower() for c in drop_cols}
+        wanted_norm = {_snake_name(c) for c in drop_cols}
+        keep = [
+            c
+            for c in df.columns
+            if str(c).strip().lower() not in wanted
+            and _snake_name(c) not in wanted_norm
+        ]
+        df = df[keep]
 
     if opts.get("drop_empty_cols"):
         df = df.dropna(axis=1, how="all")
 
+    threshold = float(opts.get("max_missing_pct") or 0)
+    if threshold > 0 and df.shape[1]:
+        missing_pct = df.isna().mean() * 100.0
+        df = df.loc[:, missing_pct <= threshold]
+
+    if opts.get("drop_constant_cols") and df.shape[1]:
+        keep = [c for c in df.columns if df[c].nunique(dropna=True) > 1]
+        df = df[keep]
+
+    if opts.get("drop_duplicate_cols") and df.shape[1] > 1:
+        keep, seen = [], set()
+        for c in df.columns:
+            key = tuple(df[c].astype(str).fillna("\0").tolist())
+            if key in seen:
+                continue
+            seen.add(key)
+            keep.append(c)
+        df = df[keep]
+
+    if df.shape[1] == 0:
+        return df
+
+    # ------------------------------------------------------------- values
+    if opts.get("strip_whitespace"):
+        for col in _text_columns(df):
+            s = df[col]
+            mask = s.map(lambda v: isinstance(v, str))
+            if mask.any():
+                df.loc[mask, col] = s[mask].str.strip()
+
+    if opts.get("coerce_numbers"):
+        for col in _text_columns(df):
+            df[col] = _coerce_numeric_text(df[col])
+
+    case = str(opts.get("text_case") or "none").lower()
+    if case in {"lower", "upper", "title"}:
+        for col in _text_columns(df):
+            s = df[col]
+            mask = s.map(lambda v: isinstance(v, str))
+            if not mask.any():
+                continue
+            text = s[mask]
+            if case == "lower":
+                df.loc[mask, col] = text.str.lower()
+            elif case == "upper":
+                df.loc[mask, col] = text.str.upper()
+            else:
+                df.loc[mask, col] = text.str.title()
+
+    find = str(opts.get("replace_find") or "")
+    if find:
+        replace_with = str(opts.get("replace_with") or "")
+        for col in _text_columns(df):
+            s = df[col]
+            mask = s.map(lambda v: isinstance(v, str) and find in v)
+            if mask.any():
+                df.loc[mask, col] = s[mask].str.replace(
+                    find, replace_with, regex=False
+                )
+
+    decimals = int(opts.get("round_decimals", -1))
+    if decimals >= 0:
+        for col in _numeric_columns(df):
+            df[col] = df[col].round(decimals)
+
+    fill = str(opts.get("fill_missing") or "none").lower()
+    if fill != "none":
+        if fill == "zero":
+            for col in _numeric_columns(df):
+                df[col] = df[col].fillna(0)
+        elif fill == "unknown":
+            for col in _text_columns(df):
+                df[col] = df[col].fillna("Unknown")
+        elif fill in {"ffill", "bfill"}:
+            df = df.ffill() if fill == "ffill" else df.bfill()
+        elif fill in {"mean", "median"}:
+            for col in _numeric_columns(df):
+                value = (
+                    df[col].mean() if fill == "mean" else df[col].median()
+                )
+                if pd.notna(value):
+                    df[col] = df[col].fillna(value)
+        elif fill == "mode":
+            for col in df.columns:
+                modes = df[col].mode(dropna=True)
+                if len(modes):
+                    df[col] = df[col].fillna(modes.iloc[0])
+
+    # --------------------------------------------------------------- rows
+    if opts.get("drop_empty_rows"):
+        df = df.dropna(how="all")
+
+    if opts.get("drop_rows_with_null"):
+        df = df.dropna(how="any")
+
     if opts.get("dedupe") and len(df):
-        df = df.drop_duplicates()
+        keep = "last" if str(opts.get("dedupe_keep")) == "last" else "first"
+        df = df.drop_duplicates(keep=keep)
+
+    # ------------------------------------------------------------- naming
+    if opts.get("normalize_col_names") and df.shape[1]:
+        taken: set = set()
+        df.columns = [_unique_name(_snake_name(c), taken) for c in df.columns]
+
+    # ------------------------------------------------------------- sorting
+    sort_by = str(opts.get("sort_by") or "").strip()
+    if sort_by and df.shape[1]:
+        match = next(
+            (c for c in df.columns if str(c).strip().lower() == sort_by.lower()),
+            None,
+        )
+        if match is not None and len(df):
+            df = df.sort_values(
+                by=match,
+                ascending=not bool(opts.get("sort_desc")),
+                kind="stable",
+                na_position="last",
+            )
 
     return df.reset_index(drop=True)
 
@@ -553,6 +885,48 @@ def _build_profile(df: pd.DataFrame, filename: str | None = None) -> dict:
     ]
     flagged = sum(1 for f in fields if f["anomalies"])
 
+    by_kind: dict = {}
+    for f in fields:
+        by_kind[f["kind"]] = by_kind.get(f["kind"], 0) + 1
+
+    # Constant (single-value) columns and columns carrying outlier flags.
+    constant_cols = 0
+    outlier_cols = 0
+    complete_cols = 0
+    for f in fields:
+        if f.get("unique") == 1:
+            constant_cols += 1
+        if any("outlier" in a for a in f.get("anomalies", [])):
+            outlier_cols += 1
+        if not f.get("missing"):
+            complete_cols += 1
+
+    # Span of the first real date column, when the frame has one.
+    date_min = date_max = None
+    for f in fields:
+        if f["kind"] != "datetime":
+            continue
+        series = df[f["name"]]
+        try:
+            lo, hi = series.min(), series.max()
+        except (TypeError, ValueError):
+            continue
+        if pd.notna(lo) and pd.notna(hi):
+            date_min = pd.Timestamp(lo).isoformat()
+            date_max = pd.Timestamp(hi).isoformat()
+            break
+
+    try:
+        memory_bytes = int(df.memory_usage(deep=True).sum())
+    except (TypeError, ValueError):
+        memory_bytes = 0
+
+    path = SESSION_DATA.get("path")
+    try:
+        file_bytes = os.path.getsize(path) if path else 0
+    except OSError:
+        file_bytes = 0
+
     return {
         "filename": filename,
         "rows": n_rows,
@@ -566,6 +940,19 @@ def _build_profile(df: pd.DataFrame, filename: str | None = None) -> dict:
         "duplicate_rows": dupes,
         "flagged_fields": flagged,
         "fields": fields,
+        # -- extended summary (the dashboard shows these when present) ------
+        "cells": int(total_cells),
+        "complete_cols": complete_cols,
+        "constant_cols": constant_cols,
+        "outlier_cols": outlier_cols,
+        "numeric_cols": by_kind.get("number", 0),
+        "text_cols": by_kind.get("string", 0) + by_kind.get("category", 0),
+        "date_cols": by_kind.get("datetime", 0) + by_kind.get("timedelta", 0),
+        "bool_cols": by_kind.get("boolean", 0),
+        "date_min": date_min,
+        "date_max": date_max,
+        "memory_bytes": memory_bytes,
+        "file_bytes": file_bytes,
     }
 
 
@@ -654,18 +1041,82 @@ def _err(message: str, status: int = 400):
     return jsonify({"success": False, "error": message}), status
 
 
+_INT_OPTIONS = ("skip_rows", "skip_cols", "skip_last_rows", "skip_last_cols")
+_BOOL_OPTIONS = (
+    "has_header",
+    "promote_first_row",
+    "transpose",
+    "strip_whitespace",
+    "drop_empty_rows",
+    "drop_rows_with_null",
+    "drop_empty_cols",
+    "drop_constant_cols",
+    "drop_duplicate_cols",
+    "dedupe",
+    "sort_desc",
+    "coerce_numbers",
+    "normalize_col_names",
+)
+_TEXT_OPTIONS = (
+    "data_range",
+    "drop_cols",
+    "sort_by",
+    "text_case",
+    "fill_missing",
+    "dedupe_keep",
+    "replace_find",
+    "replace_with",
+)
+
+
 def _merge_options(payload: dict | None) -> dict:
+    """Coerce a JSON payload from the browser into a validated option dict."""
     opts = dict(DEFAULT_OPTIONS)
     payload = payload or {}
-    for key in ("skip_rows", "skip_cols"):
+
+    for key in _INT_OPTIONS:
         try:
             opts[key] = max(0, int(payload.get(key, 0) or 0))
         except (TypeError, ValueError):
             opts[key] = 0
-    opts["data_range"] = str(payload.get("data_range", "") or "").strip()
-    for key in ("strip_whitespace", "drop_empty_rows", "drop_empty_cols", "dedupe"):
+
+    for key in _BOOL_OPTIONS:
         if key in payload:
             opts[key] = bool(payload[key])
+
+    for key in _TEXT_OPTIONS:
+        if key in payload:
+            opts[key] = str(payload.get(key) or "").strip()
+
+    try:
+        opts["round_decimals"] = int(payload.get("round_decimals", -1))
+    except (TypeError, ValueError):
+        opts["round_decimals"] = -1
+    if opts["round_decimals"] < -1 or opts["round_decimals"] > 12:
+        opts["round_decimals"] = -1
+
+    try:
+        opts["max_missing_pct"] = float(payload.get("max_missing_pct", 0) or 0)
+    except (TypeError, ValueError):
+        opts["max_missing_pct"] = 0.0
+    opts["max_missing_pct"] = min(100.0, max(0.0, opts["max_missing_pct"]))
+
+    if opts["dedupe_keep"] not in {"first", "last"}:
+        opts["dedupe_keep"] = "first"
+    if opts["text_case"] not in {"none", "lower", "upper", "title"}:
+        opts["text_case"] = "none"
+    if opts["fill_missing"] not in {
+        "none",
+        "zero",
+        "unknown",
+        "ffill",
+        "bfill",
+        "mean",
+        "median",
+        "mode",
+    }:
+        opts["fill_missing"] = "none"
+
     return opts
 
 
@@ -676,11 +1127,15 @@ def _rebuild(options: dict) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
         skip_rows=options["skip_rows"],
         skip_cols=options.get("skip_cols", 0),
         data_range=options.get("data_range", ""),
+        has_header=options.get("has_header", True),
     )
     cleaned = _apply_options(raw.copy(), options)
     cleaned = _infer_excel_serial_dates(cleaned)
     cleaned = _infer_datetimes(cleaned)
-    profile = _build_profile(cleaned, SESSION_DATA.get("filename"))
+    profile = _build_profile(
+        cleaned,
+        SESSION_DATA.get("display_name") or SESSION_DATA.get("filename"),
+    )
     return raw, cleaned, profile
 
 
@@ -710,6 +1165,7 @@ def upload():
     if ext not in ALLOWED_EXTENSIONS:
         return _err("Only .csv and .xlsx files are supported.")
 
+    display_name = os.path.basename(file.filename)
     filename = secure_filename(file.filename) or f"upload{ext}"
     os.makedirs(UPLOAD_DIR, exist_ok=True)
     path = os.path.join(
@@ -724,6 +1180,7 @@ def upload():
         {
             "path": path,
             "filename": filename,
+            "display_name": display_name,
             "raw_df": None,
             "df": None,
             "processed_df": None,
@@ -739,6 +1196,7 @@ def upload():
             {
                 "path": None,
                 "filename": None,
+                "display_name": None,
                 "raw_df": None,
                 "df": None,
                 "processed_df": None,
@@ -883,6 +1341,54 @@ def api_data():
         payload,
         mimetype="application/vnd.apache.arrow.stream",
         headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.route("/api/export/xlsx", methods=["POST"])
+def api_export_xlsx():
+    """
+    Convert whatever the dashboard is currently showing into an .xlsx file.
+
+    The browser posts the *view* (already pivoted/aggregated by Perspective)
+    as an Arrow IPC stream, so the workbook matches the grid on screen rather
+    than the raw upload.
+    """
+    raw = request.get_data()
+    if not raw:
+        return _err("Nothing to export.", 400)
+
+    try:
+        with pa.ipc.open_stream(pa.BufferReader(raw)) as reader:
+            table = reader.read_all()
+    except Exception as exc:  # noqa: BLE001 - surface the parser message
+        return _err(f"Could not read the exported view: {exc}", 400)
+
+    if table.num_rows == 0 or table.num_columns == 0:
+        return _err("The current view has no rows to export.", 422)
+
+    try:
+        frame = table.to_pandas()
+    except Exception as exc:  # noqa: BLE001
+        return _err(f"Could not convert the view to a table: {exc}", 500)
+
+    buffer = io.BytesIO()
+    try:
+        with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+            frame.to_excel(writer, index=False, sheet_name="View")
+    except Exception as exc:  # noqa: BLE001
+        return _err(f"Could not build the workbook: {exc}", 500)
+
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    filename = f"view-{stamp}.xlsx"
+    return Response(
+        buffer.getvalue(),
+        mimetype=(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        ),
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-store",
+        },
     )
 
 

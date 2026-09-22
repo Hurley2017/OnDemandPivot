@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Client Profitability Analytics — Dashboard</title>
     <link rel="icon"
-          href="{{ url_for('static', filename='icon/LOGO.PNG') }}">
+          href="{{ url_for('static', filename='icon/Tab Logo.png') }}?v={{ asset_version('icon/Tab Logo.png') }}">
 
     <!-- Perspective v3.8.0 (CDN). The viewer bundle self-initialises its WASM
          relative to its own URL, so no manual init_client/init_server call is
@@ -16,7 +16,8 @@
           href="https://cdn.jsdelivr.net/npm/@finos/perspective-viewer-datagrid@3.8.0/dist/css/perspective-viewer-datagrid.min.css">
     <link rel="stylesheet"
           href="https://cdn.jsdelivr.net/npm/@finos/perspective-viewer-d3fc@3.8.0/dist/css/perspective-viewer-d3fc.min.css">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='css/style.css') }}?v={{ asset_version('css/style.css') }}">
 </head>
 <body class="page-dashboard">
 
@@ -32,14 +33,17 @@
              alt="Client Profitability Analytics logo">
         <div class="brand-text">
             <span class="brand-name">Client Profitability <span>Analytics</span></span>
-            <span class="brand-tag">Self-service profitability workbench</span>
+            <span class="brand-tag">On Device Self-Service Workbench</span>
         </div>
     </div>
-    <div class="header-actions">
-        <span class="dataset-pill" title="{{ filename }}">
-            <b>{{ filename }}</b> · {{ rows }} rows × {{ cols }} cols
-        </span>
-        <a class="btn btn-ghost btn-sm" href="/">New dataset</a>
+    <div class="header-actions header-actions-stacked">
+        <div class="dataset-meta">
+            <span class="dataset-file" id="navFile" title="{{ filename }}">{{ filename }}</span>
+            <span class="dataset-sub" id="navMeta">
+                {{ rows }} rows × {{ cols }} cols · {{ flagged }} flagged
+            </span>
+        </div>
+        <a class="btn btn-primary btn-sm" href="/">New Dataset</a>
     </div>
 </header>
 
@@ -76,12 +80,15 @@
 
             <div class="toolbar-divider" aria-hidden="true"></div>
 
-            <div class="toolbar-group">
+            <div class="toolbar-group toolbar-end">
                 <button class="btn btn-ghost btn-sm" id="settingsBtn" type="button">
                     Pivot panel
                 </button>
                 <button class="btn btn-ghost btn-sm" id="resetBtn" type="button">
                     Reset
+                </button>
+                <button class="btn btn-dark btn-sm" id="downloadBtn" type="button">
+                    Download
                 </button>
             </div>
         </div>
@@ -119,9 +126,10 @@
         <section class="card">
             <div class="card-head">
                 <h2>Dataset summary</h2>
+                <span class="tag" id="summaryTag">—</span>
             </div>
             <div class="card-body">
-                <div class="stat-grid" id="summaryStats"></div>
+                <div class="stat-grid stat-grid-tight" id="summaryStats"></div>
             </div>
         </section>
     </aside>
@@ -173,12 +181,14 @@
                        spellcheck="false" placeholder="gpt-4o-mini">
             </div>
 
-            <button class="btn btn-ghost btn-sm" id="chatSaveCfg" type="button">
-                Save connection
-            </button>
-            <button class="btn btn-ghost btn-sm" id="chatClearCfg" type="button">
-                Clear
-            </button>
+            <div class="chat-config-actions">
+                <button class="btn btn-ghost btn-sm" id="chatSaveCfg" type="button">
+                    Save connection
+                </button>
+                <button class="btn btn-ghost btn-sm" id="chatClearCfg" type="button">
+                    Clear
+                </button>
+            </div>
         </div>
     </details>
 
@@ -200,6 +210,8 @@
     </div>
 </section>
 
-<script type="module" src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+<script src="{{ url_for('static', filename='js/ui.js') }}?v={{ asset_version('js/ui.js') }}"></script>
+<script type="module"
+        src="{{ url_for('static', filename='js/dashboard.js') }}?v={{ asset_version('js/dashboard.js') }}"></script>
 </body>
 </html>

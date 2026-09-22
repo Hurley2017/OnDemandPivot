@@ -150,5 +150,109 @@ html = r.data.decode()
 print("  upload page ->", r.status_code, len(html), "bytes")
 print("  title present:", "Client Profitability Analytics" in html)
 print("  logo referenced:", "icon/LOGO.PNG" in html)
+print("  tab logo referenced:", "icon/Tab Logo.png" in html)
+print("  cache-busted assets:", "?v=" in html)
+
+# --- 7. open-ended Excel ranges ---------------------------------------------
+print("\nopen-ended ranges:")
+# Cleaning is disabled so the shapes reflect the range alone (raw = 711 rows).
+RAW = {"drop_empty_rows": False, "drop_empty_cols": False, "dedupe": False,
+       "strip_whitespace": False}
+for spec, want_cols, want_rows in [
+    ("A1:D6", 4, 5),
+    ("A:C", 3, 711),
+    ("B:D", 3, 711),
+    ("2:5", 16, 3),
+    ("C1:E", 3, 711),
+    ("$B$2:$D$4", 3, 2),
+    ("B3", 1, 709),
+    ("B3:H", 7, 709),
+    ("H2:A5", 8, 3),          # reversed columns are tolerated
+]:
+    raw, _clean, _prof = m._rebuild(m._merge_options({**RAW, "data_range": spec}))
+    got = (raw.shape[1], raw.shape[0])
+    print("  %-12s -> %s cols x %s rows" % (spec, got[0], got[1]))
+    assert got == (want_cols, want_rows), (spec, got, (want_cols, want_rows))
+
+for bad in ["not-a-range", "A:B:C", ":", "A1:2B"]:
+    try:
+        m._parse_range(bad)
+        raise AssertionError("expected a ValueError for %r" % bad)
+    except ValueError as exc:
+        print("  rejected %-12s -> %s" % (bad, exc))
+
+# --- 8. restructuring options ------------------------------------------------
+print("\nrestructuring options:")
+
+
+def cleaned(**opts):
+    return m._rebuild(m._merge_options({**RAW, **opts}))[1]
+
+
+def expect(label, got, want):
+    flag = "ok " if got == want else "FAIL"
+    print("  %s %-42s %s" % (flag, label, got))
+    assert got == want, (label, got, want)
+
+
+expect("skip_last_rows=10", len(cleaned(skip_last_rows=10)), 701)
+expect("skip_last_cols=4 cols", cleaned(skip_last_cols=4).shape[1], 12)
+expect("transpose shape", cleaned(transpose=True).shape, (16, 711))
+expect("has_header=False names",
+       list(m._rebuild(m._merge_options({**RAW, "has_header": False}))[0].columns)[:1],
+       ["Column 1"])
+expect("promote_first_row",
+       list(cleaned(promote_first_row=True).columns)[:3],
+       ["Government", "CANADA", "Carretera"])
+expect("drop_cols by name",
+       [c for c in cleaned(drop_cols="Country, gross sales").columns
+        if c in ("Country", "Gross Sales")], [])
+expect("normalize_col_names",
+       "gross_sales" in list(cleaned(normalize_col_names=True).columns), True)
+expect("max_missing_pct drops column",
+       "Discount Band" in cleaned(max_missing_pct=1.0).columns, False)
+expect("drop_constant_cols", cleaned(drop_constant_cols=True).shape[1] <= 16, True)
+expect("drop_duplicate_cols", cleaned(drop_duplicate_cols=True).shape[1] <= 16, True)
+expect("coerce_numbers",
+       str(cleaned(coerce_numbers=True)["Discounts"].dtype).startswith("float"), True)
+expect("text_case upper", cleaned(text_case="upper")["Country"].dropna().iloc[0],
+       "CANADA")
+expect("replace_find", int((cleaned(replace_find="Carretera",
+                                    replace_with="Road")["Product"] == "Road").sum()) > 0,
+       True)
+expect("round_decimals",
+       float(cleaned(round_decimals=0)["Profit"].dropna().iloc[0]).is_integer(), True)
+expect("fill_missing=bfill", int(cleaned(fill_missing="bfill")["Discount Band"].isna().sum()), 0)
+expect("drop_rows_with_null", int(cleaned(drop_rows_with_null=True).isna().sum().sum()), 0)
+expect("dedupe_keep=last", len(cleaned(dedupe=True, dedupe_keep="last")), 701)
+_sales = cleaned(sort_by="Sales", sort_desc=True)["Sales"].dropna().tolist()
+expect("sort_by desc", _sales == sorted(_sales, reverse=True), True)
+
+# --- 9. extended profile summary --------------------------------------------
+print("\nextended profile summary:")
+prof = m._rebuild(m._merge_options({}))[2]
+for key in ("cells", "complete_cols", "constant_cols", "outlier_cols",
+            "numeric_cols", "text_cols", "date_cols", "bool_cols",
+            "date_min", "date_max", "memory_bytes", "file_bytes"):
+    print("  %-15s = %r" % (key, prof.get(key)))
+    assert key in prof, key
+assert prof["numeric_cols"] == 10, prof["numeric_cols"]
+assert prof["date_cols"] == 1, prof["date_cols"]
+assert prof["date_min"] <= prof["date_max"]
+
+# --- 10. Excel export of the current view -----------------------------------
+print("\nexport to xlsx:")
+arrow = m._df_to_arrow_stream(m.SESSION_DATA["df"])
+r = client.post("/api/export/xlsx", data=arrow,
+                content_type="application/vnd.apache.arrow.stream")
+print("  status", r.status_code, r.mimetype, len(r.data), "bytes")
+assert r.status_code == 200
+assert "spreadsheetml" in r.mimetype
+import pandas as pd  # noqa: E402 - only needed for the export check
+
+frame = pd.read_excel(io.BytesIO(r.data))
+print("  workbook shape:", frame.shape)
+assert frame.shape == (700, 16), frame.shape
+assert client.post("/api/export/xlsx", data=b"").status_code == 400
 
 print("\nALL BACKEND TESTS PASSED")

@@ -3,7 +3,7 @@
  *
  * Loads the Pandas frame (served as Apache Arrow IPC streaming bytes) into a
  * Perspective table, wires the pivot/chart toolbar to <perspective-viewer>,
- * renders the KPI side panel from /api/kpis, and drives the placeholder chat.
+ * renders the KPI side panel from /api/kpis, and drives the AI chat.
  *
  * Perspective v3.8.0 ESM bundles self-initialise their WebAssembly assets
  * relative to their own CDN URL, so no manual init_server()/init_client()
@@ -15,20 +15,28 @@ import "https://cdn.jsdelivr.net/npm/@finos/perspective-viewer@3.8.0/dist/cdn/pe
 import "https://cdn.jsdelivr.net/npm/@finos/perspective-viewer-datagrid@3.8.0/dist/cdn/perspective-viewer-datagrid.js";
 import "https://cdn.jsdelivr.net/npm/@finos/perspective-viewer-d3fc@3.8.0/dist/cdn/perspective-viewer-d3fc.js";
 
+const toast = (msg, kind) => window.CPA.toast(msg, kind);
+const escapeHtml = window.CPA.escapeHtml;
+
 /* ------------------------------------------------------------------ state */
 
 const state = {
     plugin: "Datagrid",
-    groupBy: "",
-    splitBy: "",
-    measure: "",
+    // The live view configuration. These mirror whatever the user has built in
+    // Perspective's own Pivot panel, so switching views never discards work.
+    groupBy: [],
+    splitBy: [],
+    columns: [],
+    filter: [],
+    sort: [],
     fields: [],        // [{name, kind, ...}] from /api/kpis
     schema: [],        // raw column names in frame order
     numeric: [],       // subset of schema
     categorical: [],   // string/category/date columns — chart grouping axes
     selectedKpi: null,
     registered: [],    // plugin names Perspective actually exposes
-    config: null,      // last successfully applied, complete view config
+    profile: null,
+    ready: false,
 };
 
 /**
@@ -56,6 +64,30 @@ const VIEW_SPECS = [
     { label: "Candles", plugin: "Candlestick", kind: "ohlc" },
 ];
 
+/** Keys Perspective's Table.view() accepts (the viewer config has extras). */
+const VIEW_CONFIG_KEYS = [
+    "group_by",
+    "split_by",
+    "columns",
+    "filter",
+    "sort",
+    "expressions",
+    "aggregates",
+    "group_by_depth",
+    "filter_op",
+];
+
+const KIND_BADGE = {
+    number: "badge-number",
+    string: "badge-string",
+    datetime: "badge-datetime",
+    boolean: "badge-boolean",
+    category: "badge-string",
+    timedelta: "badge-datetime",
+};
+
+const $ = (id) => document.getElementById(id);
+
 function pluginName(p) {
     if (typeof p === "string") return p;
     return (p && (p.name || p.plugin)) || "";
@@ -71,47 +103,22 @@ function specFor(plugin) {
     );
 }
 
-const $ = (id) => document.getElementById(id);
-
-function escapeHtml(value) {
-    return String(value == null ? "" : value)
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;");
-}
-
 function fail(message) {
     const box = $("loadError");
-    box.className = "notice notice-error";
-    box.textContent = message;
-    box.hidden = false;
+    if (box) {
+        box.className = "notice notice-error";
+        box.textContent = message;
+        box.hidden = false;
+    }
     const status = $("viewerStatus");
     if (status) status.textContent = "Error";
+    toast(message, "error");
 }
 
-/* Recoverable notice (e.g. a chart that cannot be built from this dataset). */
-function note(message) {
-    const box = $("loadError");
-    box.className = "notice notice-info";
-    box.textContent = message;
-    box.hidden = false;
+function setStatus(text) {
+    const el = $("viewerStatus");
+    if (el) el.textContent = text;
 }
-
-function clearNotice() {
-    const box = $("loadError");
-    box.hidden = true;
-    box.textContent = "";
-}
-
-const KIND_BADGE = {
-    number: "badge-number",
-    string: "badge-string",
-    datetime: "badge-datetime",
-    boolean: "badge-boolean",
-    category: "badge-string",
-    timedelta: "badge-datetime",
-};
 
 /* --------------------------------------------------------------- toolbar */
 
@@ -155,133 +162,11 @@ function markActiveView() {
     document.querySelectorAll(".view-btn").forEach((btn) => {
         btn.classList.toggle("is-active", btn.dataset.plugin === state.plugin);
     });
-}
-
-function firstCategorical() {
-    return state.categorical[0] || null;
-}
-
-/**
- * Resolve a complete Perspective config for `spec`, or `null` when the
- * dataset cannot support that view. Never returns a partial config.
- */
-function buildViewConfig(spec) {
-    const group = state.groupBy || firstCategorical();
-    const measure = state.measure ? [state.measure] : null;
-
-    if (spec.kind === "grid") {
-        return {
-            plugin: spec.plugin,
-            group_by: state.groupBy ? [state.groupBy] : [],
-            split_by: state.splitBy ? [state.splitBy] : [],
-            columns: measure || state.schema.slice(),
-            filter: [],
-            sort: [],
-        };
+    const dl = $("downloadBtn");
+    if (dl) {
+        dl.textContent =
+            state.plugin === "Datagrid" ? "Download Excel" : "Download PNG";
     }
-
-    // Every chart needs something to plot and something to group by.
-    if (!state.numeric.length || !group) return null;
-
-    const columns = measure || state.numeric.slice(0, 8);
-
-    if (spec.kind === "chart") {
-        return {
-            plugin: spec.plugin,
-            group_by: [group],
-            split_by: state.splitBy ? [state.splitBy] : [],
-            columns,
-            filter: [],
-            sort: [],
-        };
-    }
-
-    if (spec.kind === "xy") {
-        // X/Y plugins read the group_by axis as X, so prefer a numeric X and
-        // keep the plotted measures distinct from it.
-        const x = state.numeric.find((n) => !columns.includes(n)) || group;
-        const ys = columns.filter((c) => c !== x);
-        return {
-            plugin: spec.plugin,
-            group_by: [x],
-            split_by: state.splitBy ? [state.splitBy] : [],
-            columns: ys.length ? ys : columns,
-            filter: [],
-            sort: [],
-        };
-    }
-
-    if (spec.kind === "heatmap") {
-        const split =
-            state.splitBy || state.categorical[1] || state.categorical[0] || "";
-        return {
-            plugin: spec.plugin,
-            group_by: [group],
-            split_by: split && split !== group ? [split] : [],
-            columns: [columns[0]],
-            filter: [],
-            sort: [],
-        };
-    }
-
-    if (spec.kind === "ohlc") {
-        // OHLC / Candlestick need a date axis plus four measures.
-        const dateField = state.fields.find((f) => f.kind === "datetime");
-        if (!dateField || state.numeric.length < 4) return null;
-        // Always four series, with the chosen measure first when there is one.
-        const picked = measure
-            ? [measure[0], ...state.numeric.filter((n) => n !== measure[0])]
-            : state.numeric;
-        return {
-            plugin: spec.plugin,
-            group_by: [dateField.name],
-            split_by: [],
-            columns: picked.slice(0, 4),
-            filter: [],
-            sort: [],
-        };
-    }
-
-    // "tree" (Treemap / Sunburst)
-    return {
-        plugin: spec.plugin,
-        group_by: [group],
-        split_by: state.splitBy ? [state.splitBy] : [],
-        columns,
-        filter: [],
-        sort: [],
-    };
-}
-
-async function selectView(plugin) {
-    const spec = specFor(plugin);
-    const next = buildViewConfig(spec);
-
-    if (!next) {
-        note(
-            `The “${spec.label}” view needs at least one numeric column and one ` +
-                "groupable column. Add a measure or pick a Rows column first."
-        );
-        return;
-    }
-
-    state.plugin = plugin;
-    markActiveView();
-    if (spec.kind !== "grid" && next.group_by.length) {
-        $("groupBy").value = next.group_by[0];
-    }
-    $("viewerStatus").textContent = "Applying…";
-    await applyConfig(next);
-}
-
-/** Re-build and re-apply the current view (used by the toolbar selects). */
-async function refreshView() {
-    const next = buildViewConfig(specFor(state.plugin));
-    if (!next) {
-        note("That column choice cannot be plotted — pick a numeric column.");
-        return;
-    }
-    await applyConfig(next);
 }
 
 function fillSelect(select, options, includeAllLabel) {
@@ -300,81 +185,225 @@ function buildToolbar() {
 
     fillSelect($("groupBy"), all, "— none —");
     fillSelect($("splitBy"), all, "— none —");
-    fillSelect(
-        $("measure"),
-        state.numeric.length ? state.numeric : all,
-        "— all —"
-    );
+    fillSelect($("measure"), state.numeric.length ? state.numeric : all, "— all —");
 
     $("groupBy").addEventListener("change", async (e) => {
-        state.groupBy = e.target.value;
+        state.groupBy = e.target.value ? [e.target.value] : [];
         await refreshView();
     });
 
     $("splitBy").addEventListener("change", async (e) => {
-        state.splitBy = e.target.value;
+        state.splitBy = e.target.value ? [e.target.value] : [];
         await refreshView();
     });
 
     $("measure").addEventListener("change", async (e) => {
-        state.measure = e.target.value;
+        state.columns = e.target.value ? [e.target.value] : [];
         await refreshView();
     });
 
     $("settingsBtn").addEventListener("click", async () => {
-        const viewer = $("viewer");
         try {
-            await viewer.toggleConfig();
+            await $("viewer").toggleConfig();
         } catch (_err) {
             /* panel may already be in the requested state */
         }
     });
 
     $("resetBtn").addEventListener("click", resetView);
+    $("downloadBtn").addEventListener("click", downloadCurrentView);
+}
+
+/** Push the live Perspective config back into our toolbar controls. */
+function syncToolbarFromConfig(cfg) {
+    if (!cfg) return;
+    state.groupBy = Array.isArray(cfg.group_by) ? cfg.group_by : [];
+    state.splitBy = Array.isArray(cfg.split_by) ? cfg.split_by : [];
+    state.columns = Array.isArray(cfg.columns) ? cfg.columns : [];
+    state.filter = Array.isArray(cfg.filter) ? cfg.filter : [];
+    state.sort = Array.isArray(cfg.sort) ? cfg.sort : [];
+
+    const pick = (el, values) => {
+        if (!el) return;
+        const first = values[0] || "";
+        const has = [...el.options].some((o) => o.value === first);
+        el.value = has ? first : "";
+    };
+    pick($("groupBy"), state.groupBy);
+    pick($("splitBy"), state.splitBy);
+    pick($("measure"), state.columns.length === 1 ? state.columns : []);
+}
+
+function firstCategorical() {
+    return state.categorical[0] || null;
+}
+
+/** Columns to plot: whatever is live, narrowed to numbers, else a default. */
+function chartColumns() {
+    const live = state.columns.filter((c) => state.numeric.includes(c));
+    if (live.length) return live;
+    return state.numeric.slice(0, 8);
+}
+
+/**
+ * Resolve a complete Perspective config for `spec`, or `null` when the
+ * dataset cannot support that view. Never returns a partial config.
+ */
+function buildViewConfig(spec) {
+    const group = state.groupBy.length ? state.groupBy : [];
+    const groupAxis = group.length ? group : firstCategorical() ? [firstCategorical()] : [];
+    const split = state.splitBy;
+
+    if (spec.kind === "grid") {
+        return {
+            plugin: spec.plugin,
+            group_by: group,
+            split_by: split,
+            columns: state.columns.length ? state.columns : state.schema.slice(),
+            filter: state.filter,
+            sort: state.sort,
+        };
+    }
+
+    // Every chart needs something to plot and something to group by.
+    if (!state.numeric.length || !groupAxis.length) return null;
+
+    const columns = chartColumns();
+
+    if (spec.kind === "chart") {
+        return {
+            plugin: spec.plugin,
+            group_by: groupAxis,
+            split_by: split,
+            columns,
+            filter: state.filter,
+            sort: state.sort,
+        };
+    }
+
+    if (spec.kind === "xy") {
+        // X/Y plugins read the group_by axis as X, so prefer a numeric X and
+        // keep the plotted measures distinct from it.
+        const x = state.numeric.find((n) => !columns.includes(n)) || groupAxis[0];
+        const ys = columns.filter((c) => c !== x);
+        return {
+            plugin: spec.plugin,
+            group_by: [x],
+            split_by: split,
+            columns: ys.length ? ys : columns,
+            filter: state.filter,
+            sort: state.sort,
+        };
+    }
+
+    if (spec.kind === "heatmap") {
+        const second =
+            split.length
+                ? split
+                : state.categorical[1]
+                  ? [state.categorical[1]]
+                  : [];
+        const usable = second.filter((c) => !groupAxis.includes(c));
+        return {
+            plugin: spec.plugin,
+            group_by: groupAxis,
+            split_by: usable,
+            columns: [columns[0]],
+            filter: state.filter,
+            sort: state.sort,
+        };
+    }
+
+    if (spec.kind === "ohlc") {
+        // OHLC / Candlestick need a date axis plus four measures.
+        const dateField = state.fields.find((f) => f.kind === "datetime");
+        if (!dateField || state.numeric.length < 4) return null;
+        const picked = columns.length >= 4
+            ? columns.slice(0, 4)
+            : [columns[0], ...state.numeric.filter((n) => n !== columns[0])].slice(0, 4);
+        return {
+            plugin: spec.plugin,
+            group_by: [dateField.name],
+            split_by: [],
+            columns: picked,
+            filter: state.filter,
+            sort: state.sort,
+        };
+    }
+
+    // "tree" (Treemap / Sunburst)
+    return {
+        plugin: spec.plugin,
+        group_by: groupAxis,
+        split_by: split,
+        columns,
+        filter: state.filter,
+        sort: state.sort,
+    };
+}
+
+async function selectView(plugin) {
+    const spec = specFor(plugin);
+    const next = buildViewConfig(spec);
+
+    if (!next) {
+        toast(
+            `The “${spec.label}” view needs a numeric column and a groupable ` +
+                "column. Add a measure or pick a Rows column first.",
+            "warn"
+        );
+        return;
+    }
+
+    state.plugin = plugin;
+    markActiveView();
+    setStatus("Applying…");
+    await applyConfig(next);
+}
+
+/** Re-build and re-apply the current view (used by the toolbar selects). */
+async function refreshView() {
+    const next = buildViewConfig(specFor(state.plugin));
+    if (!next) {
+        toast("That column choice cannot be plotted — pick a numeric column.", "warn");
+        return;
+    }
+    await applyConfig(next);
 }
 
 /**
  * Apply a *complete* config. On failure, roll back to the last good config so
- * the viewer never ends up on a broken canvas, and surface a notice instead of
- * a hard error.
+ * the viewer never ends up on a broken canvas.
  */
 async function applyConfig(next) {
     const viewer = $("viewer");
-    const previous = state.config;
     try {
         await viewer.restore(next);
-        state.config = next;
-        clearNotice();
-        $("viewerStatus").textContent = "Ready";
+        setStatus("Ready");
         return true;
     } catch (err) {
-        if (previous) {
-            try {
-                await viewer.restore(previous);
-            } catch (_err) {
-                /* the previous config is still on screen */
-            }
-        }
-        $("viewerStatus").textContent = "View unavailable";
-        note(
-            "Could not apply that view: " +
-                ((err && err.message) || String(err)) +
-                " — reverted to the previous view."
+        setStatus("View unavailable");
+        toast(
+            "Could not apply that view: " + ((err && err.message) || String(err)),
+            "error"
         );
         return false;
     }
 }
 
 async function resetView() {
-    state.plugin = "Datagrid";
-    state.groupBy = "";
-    state.splitBy = "";
-    state.measure = "";
+    state.groupBy = [];
+    state.splitBy = [];
+    state.columns = [];
+    state.filter = [];
+    state.sort = [];
     $("groupBy").value = "";
     $("splitBy").value = "";
     $("measure").value = "";
+    state.plugin = "Datagrid";
     markActiveView();
     await applyConfig(buildViewConfig(specFor("Datagrid")));
+    toast("View reset to the flat grid.", "info");
 }
 
 /* ------------------------------------------------------------- KPI panel */
@@ -465,9 +494,7 @@ function selectKpi(name) {
     }
 
     const issues = field.anomalies.length
-        ? field.anomalies
-              .map((a) => `<li>${escapeHtml(a)}</li>`)
-              .join("")
+        ? field.anomalies.map((a) => `<li>${escapeHtml(a)}</li>`).join("")
         : '<li class="ok">No anomalies detected</li>';
 
     $("kpiDetail").innerHTML = `
@@ -483,23 +510,121 @@ function selectKpi(name) {
         <ul class="issue-list">${issues}</ul>`;
 }
 
-function renderSummary(profile) {
-    const tiles = [
-        { label: "Rows", value: profile.rows },
-        { label: "Columns", value: profile.cols },
-        {
-            label: "Missing cells",
-            value: profile.missing_cells,
-            hint: profile.missing_pct + "%",
-            alert: profile.missing_pct > 0,
-        },
-        {
-            label: "Flagged columns",
-            value: profile.flagged_fields,
-            alert: profile.flagged_fields > 0,
-        },
-    ];
+/* --------------------------------------------------- dataset summary */
 
+const NUMBER_FMT = new Intl.NumberFormat(undefined);
+
+function humanBytes(bytes) {
+    if (!bytes) return "0 B";
+    const units = ["B", "KB", "MB", "GB"];
+    let value = Number(bytes);
+    let unit = 0;
+    while (value >= 1024 && unit < units.length - 1) {
+        value /= 1024;
+        unit += 1;
+    }
+    return `${value.toFixed(value >= 10 || unit === 0 ? 0 : 1)} ${units[unit]}`;
+}
+
+function shortDate(iso) {
+    if (!iso) return "—";
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return String(iso).slice(0, 10);
+    return d.toLocaleDateString(undefined, {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+    });
+}
+
+/**
+ * Build the Dataset summary tiles. Tiles are added only when the profile
+ * actually contains the relevant information, so the panel stays honest for
+ * every shape of input.
+ */
+function renderSummary(profile) {
+    const tiles = [];
+    const add = (label, value, hint, alert) =>
+        tiles.push({ label, value, hint, alert: Boolean(alert) });
+
+    add("Rows", NUMBER_FMT.format(profile.rows || 0), "after restructuring");
+    add(
+        "Columns",
+        NUMBER_FMT.format(profile.cols || 0),
+        `${profile.numeric_cols || 0} numeric · ${profile.text_cols || 0} text`
+    );
+
+    if (profile.cells) {
+        add("Cells", NUMBER_FMT.format(profile.cells), "values inspected");
+    }
+    add(
+        "Missing cells",
+        NUMBER_FMT.format(profile.missing_cells || 0),
+        `${profile.missing_pct || 0}% of dataset`,
+        profile.missing_cells > 0
+    );
+    if (profile.complete_cols !== undefined) {
+        add(
+            "Complete columns",
+            NUMBER_FMT.format(profile.complete_cols),
+            "no gaps at all"
+        );
+    }
+    if (profile.duplicate_rows) {
+        add(
+            "Duplicate rows",
+            NUMBER_FMT.format(profile.duplicate_rows),
+            "consider removing",
+            true
+        );
+    }
+    if (profile.constant_cols) {
+        add(
+            "Single-value columns",
+            NUMBER_FMT.format(profile.constant_cols),
+            "no variation",
+            true
+        );
+    }
+    if (profile.outlier_cols) {
+        add(
+            "Columns with outliers",
+            NUMBER_FMT.format(profile.outlier_cols),
+            "IQR rule",
+            true
+        );
+    }
+    if (profile.flagged_fields) {
+        add(
+            "Flagged columns",
+            NUMBER_FMT.format(profile.flagged_fields),
+            "review anomalies",
+            true
+        );
+    }
+    if (profile.date_cols) {
+        add("Date columns", NUMBER_FMT.format(profile.date_cols), "parsed as dates");
+    }
+    if (profile.date_min) {
+        add("First date", shortDate(profile.date_min), "earliest record");
+    }
+    if (profile.date_max) {
+        add("Last date", shortDate(profile.date_max), "latest record");
+    }
+    if (profile.numeric_cols) {
+        add("Numeric columns", NUMBER_FMT.format(profile.numeric_cols), "measurable");
+    }
+    if (profile.text_cols) {
+        add("Text columns", NUMBER_FMT.format(profile.text_cols), "groupable");
+    }
+    if (profile.memory_bytes) {
+        add("In memory", humanBytes(profile.memory_bytes), "cleaned frame");
+    }
+    if (profile.file_bytes) {
+        add("Source file", humanBytes(profile.file_bytes), "as uploaded");
+    }
+
+    $("summaryTag").textContent = `${tiles.length} measures`;
     $("summaryStats").innerHTML = tiles
         .map(
             (t) => `
@@ -510,6 +635,22 @@ function renderSummary(profile) {
         </div>`
         )
         .join("");
+
+    const navMeta = $("navMeta");
+    if (navMeta) {
+        navMeta.textContent =
+            `${NUMBER_FMT.format(profile.rows || 0)} rows × ` +
+            `${NUMBER_FMT.format(profile.cols || 0)} cols · ` +
+            `${profile.flagged_fields || 0} flagged` +
+            (profile.file_bytes ? ` · ${humanBytes(profile.file_bytes)}` : "");
+    }
+    if (profile.filename) {
+        const navFile = $("navFile");
+        if (navFile) {
+            navFile.textContent = profile.filename;
+            navFile.title = profile.filename;
+        }
+    }
 }
 
 async function loadKpis() {
@@ -517,12 +658,13 @@ async function loadKpis() {
     if (!resp.ok) throw new Error("Could not load KPI metadata.");
     const data = await resp.json();
     if (!data.success) throw new Error(data.error || "KPI request failed.");
+    state.profile = data.profile;
     renderKpiList(data.profile);
     renderSummary(data.profile);
     return data.profile;
 }
 
-/* ------------------------------------------------------------- Perspective */
+/* ----------------------------------------------------------- Perspective */
 
 async function loadPerspective() {
     const viewer = $("viewer");
@@ -537,14 +679,241 @@ async function loadPerspective() {
     const worker = await perspective.worker();
     const table = await worker.table(arrow);
 
+    // Keep our own config in step with whatever the user builds in the
+    // viewer's Pivot panel, so switching views never resets their work.
+    viewer.addEventListener("perspective-config-update", (event) => {
+        const cfg = event.detail;
+        if (!cfg) return;
+        if (cfg.plugin) state.plugin = cfg.plugin;
+        syncToolbarFromConfig(cfg);
+        markActiveView();
+    });
+
     await viewer.load(table);
 
-    // Initial state: flat grid showing every column.
     const initial = buildViewConfig(specFor("Datagrid"));
     await viewer.restore(initial);
-    state.config = initial;
+    setStatus("Ready");
+    state.ready = true;
+}
 
-    $("viewerStatus").textContent = "Ready";
+/* --------------------------------------------------------------- export */
+
+function viewConfigFrom(full) {
+    const out = {};
+    VIEW_CONFIG_KEYS.forEach((k) => {
+        if (full && full[k] !== undefined) out[k] = full[k];
+    });
+    return out;
+}
+
+function saveBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
+function filenameFromHeaders(resp, fallback) {
+    const cd = resp.headers.get("Content-Disposition") || "";
+    const match = /filename="?([^";]+)"?/i.exec(cd);
+    return match ? match[1] : fallback;
+}
+
+async function downloadExcel() {
+    const viewer = $("viewer");
+    const table = await viewer.getTable();
+    if (!table) throw new Error("The dataset is not ready yet.");
+
+    const cfg = viewConfigFrom(await viewer.save());
+    const view = await table.view(cfg);
+    let arrow;
+    try {
+        arrow = await view.to_arrow();
+    } finally {
+        try {
+            await view.delete();
+        } catch (_err) {
+            /* view already gone */
+        }
+    }
+    if (!arrow || !arrow.byteLength) {
+        throw new Error("The current view has no rows to export.");
+    }
+
+    const resp = await fetch("/api/export/xlsx", {
+        method: "POST",
+        headers: { "Content-Type": "application/vnd.apache.arrow.stream" },
+        body: arrow,
+    });
+    if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.error || "The workbook could not be built.");
+    }
+    saveBlob(await resp.blob(), filenameFromHeaders(resp, "view.xlsx"));
+}
+
+/** The d3fc plugin element lives in the viewer's light DOM. */
+function activeChartElement() {
+    return [...$("viewer").children].find((el) =>
+        el.tagName.toLowerCase().startsWith("perspective-viewer-d3fc")
+    );
+}
+
+// Computed styles are copied onto the clone because the stylesheet rules that
+// position and colour the chart do not travel with the SVG.
+const SVG_STYLE_PROPS = [
+    "fill",
+    "fill-opacity",
+    "stroke",
+    "stroke-width",
+    "stroke-opacity",
+    "stroke-dasharray",
+    "stroke-linecap",
+    "stroke-linejoin",
+    "opacity",
+    "font-family",
+    "font-size",
+    "font-weight",
+    "font-style",
+    "letter-spacing",
+    "text-anchor",
+    "dominant-baseline",
+    "alignment-baseline",
+    "paint-order",
+    "shape-rendering",
+    "visibility",
+];
+
+function inlineSvgStyles(source, target) {
+    const computed = getComputedStyle(source);
+    let css = "";
+    SVG_STYLE_PROPS.forEach((prop) => {
+        const value = computed.getPropertyValue(prop);
+        if (value) css += `${prop}:${value};`;
+    });
+    if (css) target.setAttribute("style", css);
+
+    const src = source.children;
+    const dst = target.children;
+    for (let i = 0; i < src.length && i < dst.length; i += 1) {
+        inlineSvgStyles(src[i], dst[i]);
+    }
+}
+
+function loadImage(src) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error("Could not rasterise the chart."));
+        img.src = src;
+    });
+}
+
+async function downloadPng() {
+    const pluginEl = activeChartElement();
+    if (!pluginEl || !pluginEl.shadowRoot) {
+        throw new Error("This view has no chart to export.");
+    }
+
+    const box = pluginEl.getBoundingClientRect();
+    const scale = 2;
+    // Legends and axis titles can sit just outside the plugin box, so the
+    // canvas is padded and every piece is drawn relative to that margin.
+    const MARGIN = 72;
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round((box.width + MARGIN * 2) * scale));
+    canvas.height = Math.max(1, Math.round((box.height + MARGIN * 2) * scale));
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    const svgs = [...pluginEl.shadowRoot.querySelectorAll("svg")].filter((s) => {
+        const r = s.getBoundingClientRect();
+        return r.width > 2 && r.height > 2;
+    });
+    if (!svgs.length) throw new Error("This view has no chart to export.");
+
+    // Axis tick labels routinely overflow the SVG box they belong to (the
+    // browser shows that overflow because SVG defaults to `visible`). When a
+    // lone SVG is rasterised, anything outside its own box is clipped, so each
+    // one is re-rendered with padding and placed back at its true offset.
+    const PAD = 64;
+
+    for (const svg of svgs) {
+        const r = svg.getBoundingClientRect();
+        const clone = svg.cloneNode(true);
+        inlineSvgStyles(svg, clone);
+        clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+        clone.setAttribute("xmlns:xlink", "http://www.w3.org/1999/xlink");
+        clone.setAttribute("overflow", "visible");
+        clone.setAttribute("preserveAspectRatio", "xMinYMin meet");
+
+        const box4 = (svg.getAttribute("viewBox") || "")
+            .split(/[\s,]+/)
+            .map(Number);
+        const hasViewBox =
+            box4.length === 4 && box4.every((n) => Number.isFinite(n));
+        if (hasViewBox) {
+            const [vx, vy, vw, vh] = box4;
+            clone.setAttribute(
+                "viewBox",
+                `${vx - PAD} ${vy - PAD} ${vw + PAD * 2} ${vh + PAD * 2}`
+            );
+        }
+        clone.setAttribute("width", String(r.width + PAD * 2));
+        clone.setAttribute("height", String(r.height + PAD * 2));
+
+        const markup = new XMLSerializer().serializeToString(clone);
+        const url =
+            "data:image/svg+xml;charset=utf-8," + encodeURIComponent(markup);
+        const img = await loadImage(url);
+        ctx.drawImage(
+            img,
+            (r.left - box.left - PAD + MARGIN) * scale,
+            (r.top - box.top - PAD + MARGIN) * scale,
+            (r.width + PAD * 2) * scale,
+            (r.height + PAD * 2) * scale
+        );
+    }
+
+    const blob = await new Promise((resolve, reject) =>
+        canvas.toBlob(
+            (b) => (b ? resolve(b) : reject(new Error("PNG encoding failed."))),
+            "image/png"
+        )
+    );
+    const stamp = new Date()
+        .toISOString()
+        .slice(0, 19)
+        .replace(/[:T]/g, "-");
+    saveBlob(blob, `${state.plugin.replace(/[^\w]+/g, "-")}-${stamp}.png`);
+}
+
+async function downloadCurrentView() {
+    const btn = $("downloadBtn");
+    if (!state.ready || btn.disabled) return;
+    const label = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "Preparing…";
+    try {
+        if (state.plugin === "Datagrid") {
+            await downloadExcel();
+            toast("Workbook downloaded.", "success");
+        } else {
+            await downloadPng();
+            toast("Chart image downloaded.", "success");
+        }
+    } catch (err) {
+        toast(err.message || String(err), "error");
+    } finally {
+        btn.disabled = false;
+        btn.textContent = label;
+    }
 }
 
 /* ------------------------------------------------------------------- chat */
@@ -704,20 +1073,16 @@ function initChat() {
 
 async function main() {
     initChat();
+    markActiveView();
 
     try {
-        const profile = await loadKpis();
+        await loadKpis();
         buildToolbar();
         await renderViewSwitch();
         await loadPerspective();
-
-        // Toolbar selects are populated from the KPI profile, so refresh the
-        // "Values" list once Perspective has confirmed the schema.
-        $("measure").value = "";
     } catch (err) {
         fail(err && err.message ? err.message : String(err));
     }
-
 }
 
 main();
