@@ -2056,7 +2056,7 @@ body.page-dashboard .site-header {
     flex: 1 1 auto;
     min-height: 0;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 340px;
+    grid-template-columns: minmax(0, 1fr);
     gap: 16px;
     padding: 16px 22px 20px;
     width: 100%;
@@ -2064,17 +2064,62 @@ body.page-dashboard .site-header {
     transition: grid-template-columns 0.24s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-/* The assistant takes a third column instead of covering the chart. */
+/* The assistant takes its own column instead of covering the chart. */
 .dash-layout.chat-open {
-    grid-template-columns: minmax(0, 1fr) 320px 380px;
+    grid-template-columns: minmax(0, 1fr) 380px;
 }
 
 .dash-main {
+    position: relative;
     min-width: 0;
     min-height: 0;
     display: flex;
     flex-direction: column;
+    gap: 0;
     overflow: hidden;
+}
+
+/* On the dashboard the info panels open over the grid, and the status chip
+   lives on the button row rather than in the viewer caption. */
+.dash-main .group-bar-wrap {
+    flex: 0 0 auto;
+    margin-bottom: 12px;
+}
+
+.dash-main .group-bar-end {
+    display: inline-flex;
+    align-items: center;
+    margin-left: auto;
+}
+
+.panel-wide {
+    width: min(980px, 100%);
+}
+
+/* The explorer is a fixed-height flex column: the list takes the slack and
+   scrolls, the detail stays put at the bottom. Both are bounded so the panel
+   never runs past the bottom of the window. */
+#panelColumns:not([hidden]) {
+    display: flex;
+    flex-direction: column;
+    max-height: min(74vh, 680px);
+    overflow: hidden;
+}
+
+#panelColumns .kpi-list {
+    flex: 1 1 auto;
+    min-height: 132px;
+    max-height: none;
+}
+
+#panelColumns .kpi-detail {
+    flex: 0 0 auto;
+    max-height: 34vh;
+    overflow-y: auto;
+}
+
+#panelSummary .stat-grid-tight {
+    grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
 }
 
 .viewer-shell {
@@ -2162,95 +2207,53 @@ perspective-viewer {
     min-height: 0;
     font-family: var(--font);
     color-scheme: light;
-
-    /* HSBC branding inside Perspective.
-       NOTE: pro.css only defines the d3fc chart variables under
-       `perspective-viewer[theme="Pro Light"]`, and the viewer does not keep
-       that attribute — so the variables never resolve and every d3fc chart
-       crashes with "Cannot read properties of null (reading 'opacity')".
-       Custom properties inherit into the viewer's shadow DOM, so defining the
-       full palette here is both the theme and the fix. */
-    --plugin--background: #ffffff;
-    --active--color: #db0011;
-    --inactive--color: #999999;
-    --select--color: rgba(219, 0, 17, 0.14);
-    --rt-pos-cell--color: #00875a;
-    --rt-neg-cell--color: #db0011;
-    --block--background: #ffffff;
-    --header--background: #f2f2f2;
-    --toolbar--background: #ffffff;
-
-    --d3fc-series: rgba(219, 0, 17, 0.8);
-    --d3fc-series-1: #db0011;
-    --d3fc-series-2: #1a1a1a;
-    --d3fc-series-3: #666666;
-    --d3fc-series-4: #b5000e;
-    --d3fc-series-5: #333333;
-    --d3fc-series-6: #999999;
-    --d3fc-series-7: #808080;
-    --d3fc-series-8: #c8c8c8;
-    --d3fc-gridline--color: #e2e2e2;
-    --d3fc-axis-ticks--color: #333333;
-    --d3fc-axis--lines: #c8c8c8;
-    --d3fc-legend--background: #ffffff;
-    --d3fc-tooltip--background: #1a1a1a;
-    --d3fc-tooltip--color: #ffffff;
-    --d3fc-full--gradient: linear-gradient(#b5000e 0%, #db0011 50%, #ffffff 100%);
-    --d3fc-positive--gradient: linear-gradient(#ffffff 0%, #00875a 100%);
-    --d3fc-negative--gradient: linear-gradient(#ffffff 0%, #db0011 100%);
 }
 
-/* ------------------------------------------------------------ side panel */
+/*
+ * HSBC branding inside Perspective.
+ *
+ * v5 names every variable `--psp-{module}--{component?}--{property}` and ships
+ * defaults in pro.css under `perspective-viewer, perspective-viewer[theme=...],
+ * perspective-viewer [theme=...]`. v5 also copies the active theme name onto
+ * the *plugin* element as a `theme` attribute, so that third selector matches
+ * the chart element itself — and a matched declaration always beats an
+ * inherited one. Setting these on the viewer alone therefore does nothing.
+ *
+ * Matching the same three shapes puts us at equal specificity, and style.css
+ * loads after pro.css, so ours win. The runtime palette is written to a
+ * separate sheet by paintViewer() for the same reason.
+ */
+perspective-viewer,
+perspective-viewer[theme],
+perspective-viewer [theme] {
+    --psp--background-color: #ffffff;
+    --psp--color: #1a1a1a;
+    --psp-plugin--background: #ffffff;
+    --psp-sidebar--background: #ffffff;
+    --psp-placeholder--background: #f7f7f7;
+    --psp-active--color: #db0011;
+    --psp-inactive--color: #999999;
+    --psp-select--color: rgba(219, 0, 17, 0.14);
+    --psp-datagrid--pos-cell--color: #00875a;
+    --psp-datagrid--neg-cell--color: #db0011;
+    --psp-datagrid--border-color: #e2e2e2;
 
-.side-panel {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-    min-height: 0;
-    overflow-y: auto;
-    padding-right: 4px;
+    /* Chart chrome (the series palette itself is set at runtime). */
+    --psp-charts--gridline--color: #e2e2e2;
+    --psp-charts--axis-ticks--color: #333333;
+    --psp-charts--axis-lines--color: #c8c8c8;
+    --psp-charts--legend--color: #1a1a1a;
+    --psp-charts--legend--background: #ffffff;
+    --psp-charts--tooltip--background: #1a1a1a;
+    --psp-charts--tooltip--color: #ffffff;
+    --psp-charts--tooltip--border-color: #1a1a1a;
+    --psp-charts--gradient--background: linear-gradient(#b5000e 0%, #db0011 50%, #ffffff 100%);
 }
 
-.side-panel .card + .card {
-    margin-top: 0;
-}
+/* ------------------------------------------------- info panels (dashboard) */
 
-/* Same design element as the import page's pop-up panels, so the dashboard
-   and the import page read as one product. */
-.side-panel .card {
-    border-top: 3px solid var(--red);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-sm);
-}
-
-.side-panel .card-head {
-    padding: 12px 16px;
-}
-
-.side-panel .card-head h2 {
-    font-size: 12px;
-}
-
-.side-panel .card-body {
-    padding: 14px 16px;
-}
-
-/* Cards keep their natural height - never squeezed and clipped - so the side
-   panel itself scrolls when the summary has a lot to show. */
-.side-panel > .card {
-    flex: 0 0 auto;
-}
-
-/* The explorer is a flex column: the list shrinks and scrolls, the detail
-   stays pinned at the bottom so selecting a column never pushes it out of
-   reach. */
-.card-explorer {
-    display: flex;
-    flex-direction: column;
-    flex: 1 1 auto;
-    min-height: 340px;
-}
-
+/* The explorer list scrolls inside its pop-up; the detail stays pinned at the
+   bottom so selecting a column never pushes it out of reach. */
 .kpi-list {
     flex: 1 1 auto;
     min-height: 96px;
@@ -2650,17 +2653,16 @@ perspective-viewer {
         overflow: visible;
     }
 
-    .side-panel {
-        overflow: visible;
-        padding-right: 0;
-    }
-
     .viewer-shell {
         min-height: 540px;
     }
 
     .kpi-list {
         max-height: 300px;
+    }
+
+    .group-panel {
+        width: 100%;
     }
 }
 

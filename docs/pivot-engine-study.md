@@ -81,6 +81,67 @@ These are the migration notes that matter, taken from the official v5.0.0 releas
 entirely in `static/js/dashboard.js` — view specs, config building, palette,
 export. The migration is concentrated, not spread across the app.
 
+### What the upgrade actually took — done, 24 Sep 2026
+
+The app now runs **`@perspective-dev` 5.5.1**, vendored under
+`static/vendor/perspective/` (4 JS bundles, 2 WASMs, 2 CSS files, 4.7 MB). The
+migration landed close to the estimate above. Notes worth keeping:
+
+1. **The server WASM lives in its own npm package.** The core bundle guesses its
+   location by rewriting a CDN-shaped path
+   (`/client@x/dist/cdn/*` → `/server@x/dist/wasm/*`) and otherwise falls back to
+   `../../../server/dist/wasm/`. Rather than reshape our vendor tree to satisfy
+   that, `dashboard.js` calls `perspective.init_server({ wasm32: … })` with the
+   real URL before any worker exists. One line, explicit, no 404s.
+
+2. **`perspective-config-update` changed shape.** `event.detail` is no longer the
+   config — it is a handle with a `getConfig()` method. Reading it as an object
+   silently produced `undefined` for every key, which is what made a
+   *stale* `state.config` look authoritative. Accepting both shapes fixed the
+   "changing colours changes my grouping" bug at the source.
+
+3. **The `[theme="…"]` trap is gone.** In v3, `pro.css` defined the chart
+   variables only under a `[theme="Pro Light"]` selector the viewer never kept,
+   so every d3fc chart crashed. v5 defines `--psp-charts--series-N--color` on the
+   element itself with real defaults, so the palette is now a plain theme
+   override. The whole crash-recovery workaround is retired.
+
+4. **Charts are canvas, not SVG.** `viewer-d3fc` is replaced by
+   `perspective-viewer-charts-<type>` elements that render to GPU canvases in a
+   shadow root. The PNG exporter was rewritten to composite laid-out canvases
+   instead of serialising and style-inlining SVGs — shorter, and it no longer
+   needs `inlineSvgStyles`/`loadImage`.
+
+5. **`viewer.export()` returns CSV** of the current view, regardless of a
+   `format` option. Used for the oversized-view CSV path so a 70 MB Arrow buffer
+   no longer round-trips to Flask just to be re-encoded. `viewer.download()`
+   exists but is not needed.
+
+6. **The datagrid header has no custom property.** Header cells sit in the
+   plugin's shadow root with a transparent background, so HSBC red headers are
+   restored by injecting a marked `<style>` into that shadow root — once, keyed
+   with `data-hsbc-headers`.
+
+7. **Maps need the network.** `viewer-charts` references
+   `tile.openstreetmap.org` and `tiles.versatiles.org` for basemaps. The 13
+   toolbar views are all offline-safe; Map and Density are deliberately **not**
+   exposed, since a blank basemap on an air-gapped machine is worse than no
+   option. `--psp-charts--map-tiles--url` exists if that ever changes.
+
+8. **v5 ships its own AI assistant** with OpenAI / Anthropic / Gemini / Ollama /
+   LM Studio / OpenRouter providers, driven by the same endpoint-and-key model as
+   our docked panel. Worth revisiting if the custom panel ever feels redundant —
+   but ours is wired to the user's own endpoint today.
+
+9. **`group_rollup_mode` / `split_rollup_mode`** replace `leaves_only`, and
+   `restore()` accepts the whole config including `table`, so table selection and
+   layout apply in one atomic render.
+
+**Verified after the upgrade:** all 13 views render `Ready`; a hand-built pivot
+survives every palette change and view switch; xlsx and PNG exports both produce
+valid files; **zero off-machine requests** in the network audit; no console
+errors.
+
 ---
 
 ## 3. The alternatives, and their quirks
@@ -186,18 +247,22 @@ its claims.
 
 ---
 
-## 5. Suggested sequence, when you give the word
+## 5. Sequence — completed
 
-1. **Spike (½–1 day)** in a scratch copy: vendor v5, confirm offline vendoring
-   still resolves WASM the same way, render one grid and one chart.
-2. **Answer four questions during the spike:**
-   - Does `viewer-charts` still cache its palette, or does the workaround go away?
-   - Does the built-in `export` replace our SVG rasteriser?
-   - What is the actual v5 asset size? (Likely ~4 MB, possibly more with the GPU engine.)
-   - Does the `--psp-*` variable rename break our HSBC theming?
-3. **Port (2–4 days):** update imports, plugin names, the `load(client)` +
-   named-table pattern, theme variables, and the palette code.
-4. **Retire workarounds** that v5 makes unnecessary.
-5. **Regression:** re-run the 13-view sweep, exports, and the 500k-row test.
+1. ~~**Spike (½–1 day)**~~ — done: v5 vendored, grid and chart render offline.
+2. ~~**Answer four questions during the spike:**~~ — done:
+   - Does `viewer-charts` still cache its palette? **No** — the workaround is gone.
+   - Does the built-in `export` replace our SVG rasteriser? **Partly** — it returns
+     CSV, so it replaces the Arrow→CSV round-trip but not the PNG. Charts are
+     canvas, so the rasteriser was rewritten rather than deleted.
+   - Actual v5 asset size? **4.7 MB** (was 3.7 MB).
+   - Does `--psp-*` break our HSBC theming? **No** — and it removes the v3 crash.
+3. ~~**Port**~~ — done: imports, plugin names, `load(client)` + named table,
+   `--psp-*` variables, palette, config-event shape.
+4. ~~**Retire workarounds**~~ — done: the `[theme]` palette workaround, the SVG
+   style-inliner and image loader are all deleted.
+5. ~~**Regression**~~ — done: 13-view sweep, palette/pivot stability, xlsx and PNG
+   exports, backend suite, offline network audit.
 
-**Do not start any of this without your signal.**
+**Still open, if you want it:** the 500k-row sweep has not been re-run against v5
+on this machine, and v5's built-in AI assistant is unused.

@@ -5,7 +5,7 @@
  * Perspective table, wires the pivot/chart toolbar to <perspective-viewer>,
  * renders the KPI side panel from /api/kpis, and drives the AI chat.
  *
- * Perspective v3.8.0 ESM bundles self-initialise their WebAssembly assets
+ * Perspective 5.5.1 (@perspective-dev) ESM bundles self-initialise their WebAssembly assets
  * relative to their own CDN URL, so no manual init_server()/init_client()
  * calls are required here.
  */
@@ -15,7 +15,16 @@
 import perspective from "../vendor/perspective/cdn/perspective.js";
 import "../vendor/perspective/cdn/perspective-viewer.js";
 import "../vendor/perspective/cdn/perspective-viewer-datagrid.js";
-import "../vendor/perspective/cdn/perspective-viewer-d3fc.js";
+import "../vendor/perspective/cdn/perspective-viewer-charts.js";
+
+// The core bundle guesses where its server WASM lives by rewriting a CDN-shaped
+// path. Ours is not CDN-shaped, so point it at the vendored file explicitly -
+// this runs before any worker is created, so it wins.
+perspective.init_server({
+    wasm32: () =>
+        fetch(new URL("../vendor/perspective/wasm/perspective-server.wasm",
+                      import.meta.url)).then((r) => r.arrayBuffer()),
+});
 
 const toast = (msg, kind) => window.CPA.toast(msg, kind);
 const escapeHtml = window.CPA.escapeHtml;
@@ -39,7 +48,7 @@ const state = {
     registered: [],    // plugin names Perspective actually exposes
     profile: null,
     ready: false,
-    table: null,       // the Perspective table, kept for viewer rebuilds
+    worker: null,      // the Perspective client, kept for viewer rebuilds
     palette: null,     // chart colours currently applied
     chatVerified: null, // null = untested, true = replied, false = failed
     chatError: "",
@@ -82,6 +91,13 @@ const VIEW_CONFIG_KEYS = [
     "group_by_depth",
     "filter_op",
 ];
+
+/**
+ * v5 binds a viewer to a Client and selects the Table by name. An unnamed
+ * table gets a *random* name that save() captures and which will not exist
+ * after a reload, so we always name ours.
+ */
+const TABLE_NAME = "dataset";
 
 const KIND_BADGE = {
     number: "badge-number",
@@ -275,10 +291,24 @@ function initPalette() {
         secondary.value = colors[1];
         paintViewer($("viewer"), colors);
         mark();
-        // d3fc only reads the palette when it first draws a chart, so an open
-        // chart is redrawn by rebuilding the viewer with the same config.
+
+        // An open chart is redrawn by rebuilding the viewer.
         if (state.plugin && state.plugin !== "Datagrid") {
-            await rebuildViewer(state.config || undefined);
+            // Rebuild from what is actually on screen. state.config can be
+            // stale once the user has dragged fields in the Pivot panel, and
+            // restoring a stale config silently changes their grouping.
+            let next = null;
+            try {
+                const live = await $("viewer").save();
+                next = {
+                    ...viewConfigFrom(live),
+                    plugin: live.plugin || state.plugin,
+                    table: TABLE_NAME,
+                };
+            } catch (_err) {
+                next = state.config || undefined;
+            }
+            await rebuildViewer(next);
             setStatus("Ready");
         }
     };
@@ -389,12 +419,95 @@ function hexToRgba(hex, alpha) {
     return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-/** Push a palette onto a viewer element as d3fc custom properties. */
+/**
+ * Push a palette onto a viewer element.
+ *
+ * v5's chart engine reads `--psp-charts--series-N--color`. Two things matter:
+ *
+ *  1. pro.css defines its defaults under `perspective-viewer [theme=...]`, which
+ *     matches the plugin element itself (v5 copies the theme name onto it) and
+ *     therefore beats inheritance from the viewer. So the palette is written to
+ *     a dedicated stylesheet matching the same shapes, which — being appended
+ *     last — wins at equal specificity.
+ *  2. The engine reads series-1, series-2, ... and stops at the first one that
+ *     is empty, so a short palette would let pro.css's orange and green leak in.
+ *     Twelve entries are always written, cycling if the palette is shorter.
+ */
+const PALETTE_VARS = 12;
+
 function paintViewer(viewer, colors) {
+    // Also inline on the host: covers the plugin element losing its theme
+    // attribute, and any part of the UI that reads the variable directly.
     colors.forEach((color, i) => {
-        viewer.style.setProperty(`--d3fc-series-${i + 1}`, color);
+        viewer.style.setProperty(`--psp-charts--series-${i + 1}--color`, color);
     });
-    viewer.style.setProperty("--d3fc-series", hexToRgba(colors[0], 0.85));
+    viewer.style.setProperty("--psp-charts--series--color", hexToRgba(colors[0], 0.85));
+
+    let sheet = document.getElementById("paletteSheet");
+    if (!sheet) {
+        sheet = document.createElement("style");
+        sheet.id = "paletteSheet";
+        document.head.appendChild(sheet);
+    }
+
+    const decls = [];
+    for (let i = 0; i < PALETTE_VARS; i += 1) {
+        decls.push(
+            `--psp-charts--series-${i + 1}--color:${colors[i % colors.length]};`
+        );
+    }
+    decls.push(`--psp-charts--series--color:${hexToRgba(colors[0], 0.85)};`);
+
+    sheet.textContent =
+        "perspective-viewer," +
+        "perspective-viewer[theme]," +
+        `perspective-viewer [theme]{${decls.join("")}}`;
+}
+
+/**
+ * HSBC-brand the grid's column headers.
+ *
+ * v5 renders the header cells inside the datagrid plugin's shadow root and
+ * exposes no custom property for their background, so a stylesheet is injected
+ * there instead. Custom properties would inherit, but the whole look (weight,
+ * casing, sort icons) has to travel with it. Injected once per shadow root and
+ * keyed with a marker attribute so it is never added twice.
+ */
+const GRID_HEADER_CSS = `
+thead th {
+    background: #db0011 !important;
+    color: #ffffff !important;
+    font-weight: 700 !important;
+    font-size: 10.5px !important;
+    letter-spacing: 0.06em !important;
+    text-transform: uppercase !important;
+    border-bottom: 1px solid #b5000e !important;
+    border-right: 1px solid rgba(255, 255, 255, 0.18) !important;
+}
+thead th:hover {
+    background: #b5000e !important;
+}
+thead th :is(.psp-header-sort-asc, .psp-header-sort-desc,
+             .psp-header-sort-col-asc, .psp-header-sort-col-desc)::after {
+    background-color: #ffffff !important;
+}
+/* v5 shows an inline-edit row under the headers. This app is read-only, so the
+   affordance is hidden rather than left as a row of inert EDIT buttons. */
+regular-table #psp-column-edit-buttons {
+    display: none !important;
+}
+`;
+
+function styleGridHeaders() {
+    const grid = [...$("viewer").children].find((el) =>
+        el.tagName.toLowerCase().startsWith("perspective-viewer-datagrid")
+    );
+    const root = grid && grid.shadowRoot;
+    if (!root || root.querySelector("style[data-hsbc-headers]")) return;
+    const style = document.createElement("style");
+    style.setAttribute("data-hsbc-headers", "1");
+    style.textContent = GRID_HEADER_CSS;
+    root.appendChild(style);
 }
 
 function loadPalette() {
@@ -406,8 +519,7 @@ function loadPalette() {
         }
     } catch (_err) {
         /* fall through to the default */
-    }
-    return PALETTES[0].colors.slice();
+    }    return PALETTES[0].colors.slice();
 }
 
 function savePalette(colors) {
@@ -434,6 +546,12 @@ function chartColumns() {
  * dataset cannot support that view. Never returns a partial config.
  */
 function buildViewConfig(spec) {
+    const cfg = rawViewConfig(spec);
+    // v5 names the table inside the config, so every config carries it.
+    return cfg ? { ...cfg, table: TABLE_NAME } : null;
+}
+
+function rawViewConfig(spec) {
     const group = state.groupBy.length ? state.groupBy : [];
     const groupAxis = group.length ? group : firstCategorical() ? [firstCategorical()] : [];
     const split = state.splitBy;
@@ -565,12 +683,26 @@ async function refreshView() {
 
 /** Attach the config-sync listener to a viewer element. */
 function attachViewerEvents(viewer) {
-    viewer.addEventListener("perspective-config-update", (event) => {
-        const cfg = event.detail;
-        if (!cfg) return;
+    viewer.addEventListener("perspective-config-update", async (event) => {
+        const detail = event.detail;
+        if (!detail) return;
+
+        // v5 hands over a handle with a getConfig() method; earlier versions
+        // handed the config object itself. Accept both.
+        let cfg = detail;
+        if (typeof detail.getConfig === "function") {
+            try {
+                cfg = await detail.getConfig();
+            } catch (_err) {
+                return;
+            }
+        }
+        if (!cfg || typeof cfg !== "object") return;
+
         if (cfg.plugin) state.plugin = cfg.plugin;
         syncToolbarFromConfig(cfg);
         markActiveView();
+        styleGridHeaders();
     });
 }
 
@@ -584,14 +716,14 @@ async function rebuildViewer(restoreConfig) {
     const old = $("viewer");
     const fresh = document.createElement("perspective-viewer");
     fresh.id = "viewer";
-    // d3fc caches its colour styles on first draw, so the palette has to be on
-    // the element before the replacement is drawn.
+    // The chart engine caches its colour styles on first draw, so the palette
+    // has to be on the element before the replacement is drawn.
     paintViewer(fresh, state.palette || PALETTES[0].colors);
     old.replaceWith(fresh);
     attachViewerEvents(fresh);
 
-    if (state.table) {
-        await fresh.load(state.table);
+    if (state.worker) {
+        await fresh.load(state.worker);
     }
 
     const next = restoreConfig || {
@@ -601,8 +733,10 @@ async function rebuildViewer(restoreConfig) {
         columns: state.schema.slice(),
         filter: [],
         sort: [],
+        table: TABLE_NAME,
     };
     await fresh.restore(next);
+    styleGridHeaders();
 
     state.config = next;
     state.plugin = next.plugin || "Datagrid";
@@ -620,6 +754,7 @@ async function applyConfig(next) {
     try {
         await $("viewer").restore(next);
         state.config = next;
+        styleGridHeaders();
         setStatus("Ready");
         return true;
     } catch (err) {
@@ -919,18 +1054,21 @@ async function loadPerspective() {
     const arrow = await resp.arrayBuffer();
 
     const worker = await perspective.worker();
-    const table = await worker.table(arrow);
-    state.table = table;
+    await worker.table(arrow, { name: TABLE_NAME });
+    state.worker = worker;
     paintViewer(viewer, state.palette || PALETTES[0].colors);
 
     // Keep our own config in step with whatever the user builds in the
     // viewer's Pivot panel, so switching views never resets their work.
     attachViewerEvents(viewer);
 
-    await viewer.load(table);
+    // v5: bind the Client, then let restore() select the table and its config
+    // in one atomic render.
+    await viewer.load(worker);
 
     const initial = buildViewConfig(specFor("Datagrid"));
     await viewer.restore(initial);
+    styleGridHeaders();
     setStatus("Ready");
     state.ready = true;
 }
@@ -992,10 +1130,42 @@ async function downloadTable() {
     }
 
     const cells = rows * Math.max(1, cols);
-    const asCsv = cells > EXCEL_CELL_BUDGET;
-    const endpoint = asCsv ? "/api/export/csv" : "/api/export/xlsx";
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
 
-    const resp = await fetch(endpoint, {
+    if (cells > EXCEL_CELL_BUDGET) {
+        // v5 can serialise the current view to CSV itself, which avoids posting
+        // a very large Arrow buffer back to the server just to be re-encoded.
+        let csv = null;
+        if (typeof viewer.export === "function") {
+            try {
+                csv = await viewer.export();
+            } catch (_err) {
+                csv = null;
+            }
+        }
+        if (typeof csv === "string" && csv.length) {
+            saveBlob(new Blob([csv], { type: "text/csv" }), `view-${stamp}.csv`);
+        } else {
+            const resp = await fetch("/api/export/csv", {
+                method: "POST",
+                headers: { "Content-Type": "application/vnd.apache.arrow.stream" },
+                body: arrow,
+            });
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({}));
+                throw new Error(err.error || "The export could not be built.");
+            }
+            saveBlob(await resp.blob(), filenameFromHeaders(resp, "view.csv"));
+        }
+        toast(
+            `${NUMBER_FMT.format(rows)} rows is too large for a quick Excel ` +
+                "write, so it downloaded as CSV — Excel opens that directly.",
+            "info"
+        );
+        return;
+    }
+
+    const resp = await fetch("/api/export/xlsx", {
         method: "POST",
         headers: { "Content-Type": "application/vnd.apache.arrow.stream" },
         body: arrow,
@@ -1004,77 +1174,28 @@ async function downloadTable() {
         const err = await resp.json().catch(() => ({}));
         throw new Error(err.error || "The export could not be built.");
     }
-    saveBlob(
-        await resp.blob(),
-        filenameFromHeaders(resp, asCsv ? "view.csv" : "view.xlsx")
-    );
-
-    if (asCsv) {
-        toast(
-            `${NUMBER_FMT.format(rows)} rows is too large for a quick Excel ` +
-                "write, so it downloaded as CSV — Excel opens that directly.",
-            "info"
-        );
-    }
+    saveBlob(await resp.blob(), filenameFromHeaders(resp, "view.xlsx"));
 }
 
-/** The d3fc plugin element lives in the viewer's light DOM. */
+/**
+ * The active plugin element lives in the viewer's light DOM. Match any
+ * perspective-viewer-* element that is not the datagrid, so this keeps working
+ * whichever chart engine the bundle ships (d3fc in v3, charts in v5).
+ */
 function activeChartElement() {
-    return [...$("viewer").children].find((el) =>
-        el.tagName.toLowerCase().startsWith("perspective-viewer-d3fc")
-    );
-}
-
-// Computed styles are copied onto the clone because the stylesheet rules that
-// position and colour the chart do not travel with the SVG.
-const SVG_STYLE_PROPS = [
-    "fill",
-    "fill-opacity",
-    "stroke",
-    "stroke-width",
-    "stroke-opacity",
-    "stroke-dasharray",
-    "stroke-linecap",
-    "stroke-linejoin",
-    "opacity",
-    "font-family",
-    "font-size",
-    "font-weight",
-    "font-style",
-    "letter-spacing",
-    "text-anchor",
-    "dominant-baseline",
-    "alignment-baseline",
-    "paint-order",
-    "shape-rendering",
-    "visibility",
-];
-
-function inlineSvgStyles(source, target) {
-    const computed = getComputedStyle(source);
-    let css = "";
-    SVG_STYLE_PROPS.forEach((prop) => {
-        const value = computed.getPropertyValue(prop);
-        if (value) css += `${prop}:${value};`;
-    });
-    if (css) target.setAttribute("style", css);
-
-    const src = source.children;
-    const dst = target.children;
-    for (let i = 0; i < src.length && i < dst.length; i += 1) {
-        inlineSvgStyles(src[i], dst[i]);
-    }
-}
-
-function loadImage(src) {
-    return new Promise((resolve, reject) => {
-        const img = new Image();
-        img.onload = () => resolve(img);
-        img.onerror = () => reject(new Error("Could not rasterise the chart."));
-        img.src = src;
+    return [...$("viewer").children].find((el) => {
+        const tag = el.tagName.toLowerCase();
+        return tag.startsWith("perspective-viewer-") && !tag.includes("datagrid");
     });
 }
 
+/**
+ * Rasterise the current chart.
+ *
+ * v5's chart engine renders to GPU-backed <canvas> elements inside the plugin's
+ * shadow root (there is no SVG any more), so the chart is composited by drawing
+ * each laid-out canvas onto one bitmap at its own offset.
+ */
 async function downloadPng() {
     const pluginEl = activeChartElement();
     if (!pluginEl || !pluginEl.shadowRoot) {
@@ -1083,8 +1204,8 @@ async function downloadPng() {
 
     const box = pluginEl.getBoundingClientRect();
     const scale = 2;
-    // Legends and axis titles can sit just outside the plugin box, so the
-    // canvas is padded and every piece is drawn relative to that margin.
+    // Axis labels and the legend can sit just outside the plugin box, so the
+    // canvas is padded and everything is drawn relative to that margin.
     const MARGIN = 72;
     const canvas = document.createElement("canvas");
     canvas.width = Math.max(1, Math.round((box.width + MARGIN * 2) * scale));
@@ -1093,52 +1214,19 @@ async function downloadPng() {
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    const svgs = [...pluginEl.shadowRoot.querySelectorAll("svg")].filter((s) => {
-        const r = s.getBoundingClientRect();
-        return r.width > 2 && r.height > 2;
-    });
-    if (!svgs.length) throw new Error("This view has no chart to export.");
+    const surfaces = [...pluginEl.shadowRoot.querySelectorAll("canvas")]
+        .map((el) => ({ el, r: el.getBoundingClientRect() }))
+        .filter(({ r }) => r.width > 2 && r.height > 2);
 
-    // Axis tick labels routinely overflow the SVG box they belong to (the
-    // browser shows that overflow because SVG defaults to `visible`). When a
-    // lone SVG is rasterised, anything outside its own box is clipped, so each
-    // one is re-rendered with padding and placed back at its true offset.
-    const PAD = 64;
+    if (!surfaces.length) throw new Error("This view has no chart to export.");
 
-    for (const svg of svgs) {
-        const r = svg.getBoundingClientRect();
-        const clone = svg.cloneNode(true);
-        inlineSvgStyles(svg, clone);
-        clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-        clone.setAttribute("xmlns:xlink", "http://www.w3.org/1999/xlink");
-        clone.setAttribute("overflow", "visible");
-        clone.setAttribute("preserveAspectRatio", "xMinYMin meet");
-
-        const box4 = (svg.getAttribute("viewBox") || "")
-            .split(/[\s,]+/)
-            .map(Number);
-        const hasViewBox =
-            box4.length === 4 && box4.every((n) => Number.isFinite(n));
-        if (hasViewBox) {
-            const [vx, vy, vw, vh] = box4;
-            clone.setAttribute(
-                "viewBox",
-                `${vx - PAD} ${vy - PAD} ${vw + PAD * 2} ${vh + PAD * 2}`
-            );
-        }
-        clone.setAttribute("width", String(r.width + PAD * 2));
-        clone.setAttribute("height", String(r.height + PAD * 2));
-
-        const markup = new XMLSerializer().serializeToString(clone);
-        const url =
-            "data:image/svg+xml;charset=utf-8," + encodeURIComponent(markup);
-        const img = await loadImage(url);
+    for (const { el, r } of surfaces) {
         ctx.drawImage(
-            img,
-            (r.left - box.left - PAD + MARGIN) * scale,
-            (r.top - box.top - PAD + MARGIN) * scale,
-            (r.width + PAD * 2) * scale,
-            (r.height + PAD * 2) * scale
+            el,
+            (r.left - box.left + MARGIN) * scale,
+            (r.top - box.top + MARGIN) * scale,
+            r.width * scale,
+            r.height * scale
         );
     }
 
@@ -1419,7 +1507,7 @@ let lastRecovery = 0;
 function looksLikePluginCrash(reason) {
     const text = (reason && (reason.stack || reason.message)) || String(reason || "");
     return (
-        text.indexOf("perspective-viewer-d3fc") >= 0 &&
+        /perspective-viewer-(charts|d3fc)/.test(text) &&
         /reading '|is not a function|of undefined|of null/.test(text)
     );
 }
@@ -1455,6 +1543,7 @@ window.addEventListener("error", (event) => {
 
 async function main() {
     window.CPA.initCollapsibles();
+    window.CPA.initGroupBar();
     initChat();
     markActiveView();
 
