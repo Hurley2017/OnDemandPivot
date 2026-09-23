@@ -935,29 +935,39 @@ table.data td.null {
     color: var(--red);
 }
 
-/* Inside the command bar the control keeps its compact metrics. */
+/* Inside the command bar the label is the pill, so the button goes borderless. */
 .cmd-group .cselect {
     width: auto;
-    min-width: 168px;
+    min-width: 150px;
 }
 
 .cmd-group .cselect-button {
-    padding: 8px 12px;
+    padding: 3px 2px;
     font-size: 13px;
+    border: none;
+    background: transparent;
+    box-shadow: none;
 }
 
-.cmd-view .cselect-button {
-    border-color: var(--black);
-    border-width: 2px;
-    background: var(--grey-050);
+.cmd-group .cselect-button:hover {
+    background: transparent;
+    border: none;
 }
 
-.cmd-view .cselect-button:hover {
-    background: var(--white);
+.cmd-group .cselect-button:focus-visible {
+    box-shadow: 0 0 0 3px rgba(219, 0, 17, 0.16);
+}
+
+.cmd-group .cselect.is-open .cselect-button {
+    box-shadow: none;
 }
 
 .cmd-view .cselect {
-    min-width: 190px;
+    min-width: 176px;
+}
+
+.cmd-view .cselect-button {
+    font-weight: 700;
 }
 
 .field .help {
@@ -1038,7 +1048,7 @@ table.data td.null {
 .group-toggle {
     width: 100%;
     display: flex;
-    align-items: baseline;
+    align-items: center;
     gap: 9px;
     flex-wrap: wrap;
     background: transparent;
@@ -1064,6 +1074,23 @@ table.data td.null {
 .group-toggle:focus-visible {
     outline: none;
     box-shadow: 0 0 0 3px rgba(219, 0, 17, 0.22);
+}
+
+/* Numbered sub-steps: outlined so they read differently from the main steps. */
+.step-sm {
+    width: 18px;
+    height: 18px;
+    font-size: 10px;
+    margin-right: 0;
+    flex: 0 0 auto;
+    background: var(--white);
+    color: var(--red);
+    border: 1.5px solid var(--red);
+}
+
+.group-toggle:hover .step-sm {
+    background: var(--red);
+    color: var(--white);
 }
 
 .group-toggle .chev {
@@ -1109,18 +1136,23 @@ table.data td.null {
    Workbench (controls + live preview)
    ========================================================================== */
 
+/* Both columns share one fixed height, so unfolding every option group
+   scrolls inside the rail instead of stretching the card. */
+:root {
+    --workbench-h: 680px;
+}
+
 .workbench {
     display: grid;
     grid-template-columns: minmax(300px, 400px) minmax(0, 1fr);
     gap: 22px;
-    align-items: stretch;
+    align-items: start;
 }
 
 .workbench-controls {
-    position: sticky;
-    top: 16px;
-    max-height: calc(100vh - 32px);
+    height: var(--workbench-h);
     overflow-y: auto;
+    overscroll-behavior: contain;
     border: 1px solid var(--grey-200);
     border-radius: var(--radius);
     padding: 4px 16px 16px;
@@ -1208,11 +1240,24 @@ table.data td.null {
     color: var(--red);
 }
 
+/* Roughly twenty rows are on screen at a time; the rest scrolls. */
+.workbench-preview {
+    height: var(--workbench-h);
+}
+
+.workbench-preview table.data tbody td {
+    padding: 5px 12px;
+}
+
+.workbench-preview table.data thead th {
+    padding: 8px 12px;
+}
+
 .workbench-preview .table-wrap {
     border: none;
     border-radius: 0;
     flex: 1 1 auto;
-    min-height: 320px;
+    min-height: 0;
     max-height: none;
 }
 
@@ -1398,27 +1443,53 @@ body.page-dashboard .site-header {
     flex: 0 0 auto;
     display: flex;
     align-items: center;
-    gap: 14px;
-    padding: 9px 22px;
+    gap: 10px;
+    padding: 10px 22px;
     background: var(--white);
     border-bottom: 1px solid var(--grey-200);
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.02);
     flex-wrap: wrap;
     z-index: 20;
 }
 
+/* Each control is a soft "field pill": the label sits inside it, so the bar
+   reads as one tidy toolbar instead of loose labels and boxes. */
 .cmd-group {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 9px;
+    background: var(--grey-050);
+    border: 1px solid var(--grey-200);
+    border-radius: 8px;
+    padding: 5px 10px 5px 12px;
+    transition: border-color 0.16s ease, background 0.16s ease,
+        box-shadow 0.16s ease;
+}
+
+.cmd-group:hover,
+.cmd-group:focus-within {
+    background: var(--white);
+    border-color: var(--grey-300);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+}
+
+.cmd-view {
+    border-left: 3px solid var(--red);
+    padding-left: 11px;
 }
 
 .cmd-group > label {
-    font-size: 10px;
+    font-size: 9.5px;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: var(--grey-600);
+    letter-spacing: 0.11em;
+    color: var(--grey-400);
     white-space: nowrap;
+}
+
+.cmd-group:hover > label,
+.cmd-group:focus-within > label {
+    color: var(--grey-600);
 }
 
 .cmd-group select {

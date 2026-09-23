@@ -10,10 +10,12 @@
  * calls are required here.
  */
 
-import perspective from "https://cdn.jsdelivr.net/npm/@finos/perspective@3.8.0/dist/cdn/perspective.js";
-import "https://cdn.jsdelivr.net/npm/@finos/perspective-viewer@3.8.0/dist/cdn/perspective-viewer.js";
-import "https://cdn.jsdelivr.net/npm/@finos/perspective-viewer-datagrid@3.8.0/dist/cdn/perspective-viewer-datagrid.js";
-import "https://cdn.jsdelivr.net/npm/@finos/perspective-viewer-d3fc@3.8.0/dist/cdn/perspective-viewer-d3fc.js";
+// Vendored locally (static/vendor/perspective) so the workbench runs on a
+// machine with no internet access. The paths are relative to this module.
+import perspective from "../vendor/perspective/cdn/perspective.js";
+import "../vendor/perspective/cdn/perspective-viewer.js";
+import "../vendor/perspective/cdn/perspective-viewer-datagrid.js";
+import "../vendor/perspective/cdn/perspective-viewer-d3fc.js";
 
 const toast = (msg, kind) => window.CPA.toast(msg, kind);
 const escapeHtml = window.CPA.escapeHtml;
@@ -344,7 +346,7 @@ function syncToolbarFromConfig(cfg) {
  */
 const PALETTES = [
     {
-        name: "Red & grey",
+        name: "HSBC Colors",
         colors: ["#db0011", "#1a1a1a", "#666666", "#b5000e", "#333333",
                  "#999999", "#808080", "#c8c8c8"],
     },

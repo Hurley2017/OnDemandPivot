@@ -270,8 +270,9 @@
             preview.cols_total && preview.cols_shown < preview.cols_total
                 ? ` · first ${preview.cols_shown} of ${preview.cols_total} columns`
                 : "";
+        const scrollNote = preview.shown > 20 ? " · scroll the table" : "";
         $("previewCount").textContent =
-            `showing ${preview.shown} of ${preview.total} rows${colNote}`;
+            `${preview.shown} of ${preview.total} rows${colNote}${scrollNote}`;
         $("previewTag").textContent =
             `${preview.total} rows × ${preview.cols_total || preview.fields.length} cols`;
         $("footSummary").textContent =

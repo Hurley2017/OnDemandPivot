@@ -54,8 +54,8 @@ ALLOWED_EXTENSIONS = {".csv", ".xlsx", ".xlsb"}
 # Excel formats we can open, and the pandas engine each one needs.
 EXCEL_ENGINES = {".xlsx": "openpyxl", ".xlsb": "pyxlsb"}
 UPLOAD_DIR = os.path.join(tempfile.gettempdir(), "ondemandpivot")
-PREVIEW_ROWS = 20
-PREVIEW_COLS = 60  # display cap only; the dashboard always gets every column
+PREVIEW_ROWS = 100  # sent to the browser; the table shows ~20 and scrolls
+PREVIEW_COLS = 60   # display cap only; the dashboard always gets every column
 # Above this many cells a .xlsx export is swapped for CSV (see /api/export/*).
 EXCEL_CELL_BUDGET = 500_000
 

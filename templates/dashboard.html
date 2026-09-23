@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
@@ -7,15 +7,16 @@
     <link rel="icon"
           href="{{ url_for('static', filename='icon/favicon.png') }}?v={{ asset_version('icon/favicon.png') }}">
 
-    <!-- Perspective v3.8.0 (CDN). The viewer bundle self-initialises its WASM
-         relative to its own URL, so no manual init_client/init_server call is
-         needed. Theme CSS is loaded before ours so our HSBC overrides win. -->
+    <!-- Perspective v3.8.0, vendored locally so the app works with no internet
+         access. The bundles self-initialise their WASM relative to their own
+         URL (`../wasm/...`), which is why the vendor tree mirrors the package
+         layout. Theme CSS loads before ours so our HSBC overrides win. -->
     <link rel="stylesheet"
-          href="https://cdn.jsdelivr.net/npm/@finos/perspective-viewer@3.8.0/dist/css/pro.css">
+          href="{{ url_for('static', filename='vendor/perspective/cdn/pro.css') }}?v={{ asset_version('vendor/perspective/cdn/pro.css') }}">
     <link rel="stylesheet"
-          href="https://cdn.jsdelivr.net/npm/@finos/perspective-viewer-datagrid@3.8.0/dist/css/perspective-viewer-datagrid.min.css">
+          href="{{ url_for('static', filename='vendor/perspective/cdn/perspective-viewer-datagrid.min.css') }}?v={{ asset_version('vendor/perspective/cdn/perspective-viewer-datagrid.min.css') }}">
     <link rel="stylesheet"
-          href="https://cdn.jsdelivr.net/npm/@finos/perspective-viewer-d3fc@3.8.0/dist/css/perspective-viewer-d3fc.min.css">
+          href="{{ url_for('static', filename='vendor/perspective/cdn/perspective-viewer-d3fc.min.css') }}?v={{ asset_version('vendor/perspective/cdn/perspective-viewer-d3fc.min.css') }}">
     <link rel="stylesheet"
           href="{{ url_for('static', filename='css/style.css') }}?v={{ asset_version('css/style.css') }}">
 </head>
@@ -69,8 +70,6 @@
         <label for="viewSelect">View</label>
         <select id="viewSelect"></select>
     </div>
-
-    <span class="cmd-divider" aria-hidden="true"></span>
 
     <div class="cmd-group">
         <label for="groupBy">Group by</label>
@@ -153,7 +152,7 @@
     <aside class="side-panel">
         <section class="card">
             <div class="card-head">
-                <h2>Dataset summary</h2>
+                <h2><span class="step">1</span>Dataset summary</h2>
                 <span class="tag" id="summaryTag">—</span>
             </div>
             <div class="card-body">
@@ -163,7 +162,7 @@
 
         <section class="card card-explorer">
             <div class="card-head">
-                <h2>Column explorer</h2>
+                <h2><span class="step">2</span>Column explorer</h2>
                 <span class="tag" id="kpiTag">—</span>
             </div>
             <div class="kpi-list" id="kpiList">
@@ -179,7 +178,7 @@
     <aside class="chat-dock" id="chatDock" hidden aria-label="AI Data Assistant">
         <div class="chat-head">
             <div class="chat-head-title">
-                <b>AI Data Assistant</b>
+                <b>3 &nbsp;AI Data Assistant</b>
                 <span id="chatMode">No model connected</span>
             </div>
             <button class="chat-close" id="chatClose" type="button"
