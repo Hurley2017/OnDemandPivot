@@ -338,6 +338,24 @@ if os.path.exists(MULTI):
     print("  Detail  ->", detail["profile"]["rows"], "x", detail["profile"]["cols"],
           [f["name"] for f in detail["profile"]["fields"]])
     assert [f["name"] for f in detail["profile"]["fields"]] == ["Item", "Qty"]
+    assert detail["profile"]["source_rows"] == 4, detail["profile"]["source_rows"]
+    print("  source shape followed the sheet switch:",
+          detail["profile"]["source_rows"], "x", detail["profile"]["source_cols"])
+
+    # Going back must restore the first sheet's shape, and restructuring on the
+    # same sheet must NOT move it again.
+    r = client.post("/preview", json={"sheet": "Summary"})
+    back = r.get_json()
+    assert back["profile"]["source_rows"] == 3, back["profile"]["source_rows"]
+    print("  switched back ->", back["profile"]["source_rows"], "x",
+          back["profile"]["source_cols"])
+    r = client.post("/preview", json={"sheet": "Summary", "skip_rows": 1})
+    skipped = r.get_json()
+    assert skipped["profile"]["source_rows"] == 3, skipped["profile"]["source_rows"]
+    assert skipped["profile"]["rows"] == 2, skipped["profile"]["rows"]
+    print("  skip_rows on the same sheet keeps source at",
+          skipped["profile"]["source_rows"], "while cleaned is",
+          skipped["profile"]["rows"])
     up()
 
 # --- 12. unsupported extensions are refused ---------------------------------

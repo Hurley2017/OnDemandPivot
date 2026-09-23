@@ -1156,6 +1156,19 @@ _TEXT_OPTIONS = (
 )
 
 
+def _recapture_source_shape_if_sheet_changed(options: dict) -> None:
+    """
+    Reset the recorded source shape when the worksheet changes.
+
+    `source_shape` is captured on the very first read of an upload and then left
+    alone, so restructuring never moves it. Switching worksheets is the one
+    change that invalidates it — without this the header keeps reporting the
+    previous sheet's dimensions.
+    """
+    if options.get("sheet") != (SESSION_DATA.get("options") or {}).get("sheet"):
+        SESSION_DATA["source_shape"] = None
+
+
 def _merge_options(payload: dict | None) -> dict:
     """Coerce a JSON payload from the browser into a validated option dict."""
     opts = dict(DEFAULT_OPTIONS)
@@ -1392,6 +1405,10 @@ def preview():
         return _err("No upload in session. Please upload a file.", 404)
 
     options = _merge_options(request.get_json(silent=True))
+    # The source-file facts are captured on the first read and never move, so
+    # they must be recaptured when the worksheet changes — otherwise the header
+    # keeps reporting the previous sheet's dimensions.
+    _recapture_source_shape_if_sheet_changed(options)
     try:
         raw, cleaned, profile = _rebuild(options)
     except Exception as exc:
@@ -1425,6 +1442,7 @@ def process():
         return _err("No upload in session. Please upload a file.", 404)
 
     options = _merge_options(request.get_json(silent=True))
+    _recapture_source_shape_if_sheet_changed(options)
     try:
         raw, cleaned, profile = _rebuild(options)
     except Exception as exc:
