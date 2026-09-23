@@ -43,14 +43,16 @@
     box-sizing: border-box;
 }
 
-html,
-body {
-    margin: 0;
-    padding: 0;
+html {
     height: 100%;
 }
 
+/* min-height, not height: a fixed body height would cap the containing block
+   and stop the header from sticking while the page scrolls. */
 body {
+    margin: 0;
+    padding: 0;
+    min-height: 100%;
     font-family: var(--font);
     font-size: 14px;
     line-height: 1.5;
@@ -93,8 +95,9 @@ code {
    Header
    ========================================================================== */
 
+/* Frozen: stays put while the page scrolls. */
 .site-header {
-    height: var(--header-h);
+    min-height: var(--header-h);
     background: var(--white);
     border-bottom: 3px solid var(--red);
     display: flex;
@@ -102,8 +105,10 @@ code {
     justify-content: space-between;
     gap: 24px;
     padding: 0 28px;
-    position: relative;
-    z-index: 30;
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04);
 }
 
 .brand {
@@ -935,15 +940,18 @@ table.data td.null {
     color: var(--red);
 }
 
-/* Inside the command bar the label is the pill, so the button goes borderless. */
+/* Borderless triggers: the field itself is the control. */
 .cmd-group .cselect {
     width: auto;
-    min-width: 150px;
+    min-width: 0;
 }
 
 .cmd-group .cselect-button {
-    padding: 3px 2px;
-    font-size: 13px;
+    width: auto;
+    min-height: 20px;
+    padding: 0;
+    gap: 9px;
+    justify-content: flex-start;
     border: none;
     background: transparent;
     box-shadow: none;
@@ -956,18 +964,35 @@ table.data td.null {
 
 .cmd-group .cselect-button:focus-visible {
     box-shadow: 0 0 0 3px rgba(219, 0, 17, 0.16);
+    border-radius: 3px;
 }
 
 .cmd-group .cselect.is-open .cselect-button {
     box-shadow: none;
 }
 
-.cmd-view .cselect {
-    min-width: 176px;
+.cmd-group .cselect-label {
+    font-size: 13.5px;
+    font-weight: 700;
+    color: var(--black);
 }
 
-.cmd-view .cselect-button {
-    font-weight: 700;
+.cmd-group .cselect-arrow {
+    border-color: var(--grey-400);
+}
+
+.cmd-group:hover .cselect-arrow,
+.cmd-group:focus-within .cselect-arrow {
+    border-color: var(--red);
+}
+
+/* A narrow trigger still needs a comfortably wide menu. */
+.cmd-group .cselect-panel {
+    min-width: 220px;
+}
+
+.cmd-view .cselect-label {
+    font-size: 14px;
 }
 
 .field .help {
@@ -1249,8 +1274,12 @@ table.data td.null {
     padding: 5px 12px;
 }
 
+/* HSBC red header, as requested for the live preview. */
 .workbench-preview table.data thead th {
     padding: 8px 12px;
+    background: var(--red);
+    color: var(--white);
+    border-right: 1px solid var(--red-dark);
 }
 
 .workbench-preview .table-wrap {
@@ -1439,57 +1468,65 @@ body.page-dashboard .site-header {
 
 /* ------------------------------------------------------------ command bar */
 
+/* A property bar: each field is a stacked label + value, separated by hairline
+   dividers, with no boxes at all. Hovering lights the whole segment. */
 .command-bar {
     flex: 0 0 auto;
     display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 22px;
+    align-items: stretch;
+    gap: 0;
+    padding: 0 20px;
+    min-height: 58px;
     background: var(--white);
     border-bottom: 1px solid var(--grey-200);
-    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.02);
     flex-wrap: wrap;
     z-index: 20;
 }
 
-/* Each control is a soft "field pill": the label sits inside it, so the bar
-   reads as one tidy toolbar instead of loose labels and boxes. */
 .cmd-group {
+    position: relative;
     display: flex;
-    align-items: center;
-    gap: 9px;
-    background: var(--grey-050);
-    border: 1px solid var(--grey-200);
-    border-radius: 8px;
-    padding: 5px 10px 5px 12px;
-    transition: border-color 0.16s ease, background 0.16s ease,
-        box-shadow 0.16s ease;
+    flex-direction: column;
+    justify-content: center;
+    gap: 2px;
+    padding: 9px 18px;
+    border-right: 1px solid var(--grey-200);
+    transition: background 0.15s ease;
 }
 
 .cmd-group:hover,
 .cmd-group:focus-within {
-    background: var(--white);
-    border-color: var(--grey-300);
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+    background: var(--grey-050);
 }
 
-.cmd-view {
-    border-left: 3px solid var(--red);
-    padding-left: 11px;
+.cmd-group:last-of-type {
+    border-right: none;
 }
 
 .cmd-group > label {
-    font-size: 9.5px;
+    font-size: 9px;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.11em;
+    letter-spacing: 0.13em;
     color: var(--grey-400);
     white-space: nowrap;
+    transition: color 0.15s ease;
 }
 
 .cmd-group:hover > label,
 .cmd-group:focus-within > label {
     color: var(--grey-600);
+}
+
+/* The view is the primary control, so it carries the brand accent. */
+.cmd-view {
+    padding-left: 14px;
+    border-left: 3px solid var(--red);
+}
+
+.cmd-view > label {
+    color: var(--red);
+    opacity: 0.75;
 }
 
 .cmd-group select {
@@ -1851,14 +1888,20 @@ perspective-viewer {
     padding: 14px 16px;
 }
 
+/* Cards keep their natural height - never squeezed and clipped - so the side
+   panel itself scrolls when the summary has a lot to show. */
+.side-panel > .card {
+    flex: 0 0 auto;
+}
+
 /* The explorer is a flex column: the list shrinks and scrolls, the detail
    stays pinned at the bottom so selecting a column never pushes it out of
    reach. */
 .card-explorer {
     display: flex;
     flex-direction: column;
-    min-height: 0;
     flex: 1 1 auto;
+    min-height: 340px;
 }
 
 .kpi-list {
