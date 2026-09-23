@@ -28,9 +28,16 @@
 
     <!-- One card: pick a file, see what we found, shape it, preview it. -->
     <section class="card" id="importCard">
-        <div class="card-head">
+        <!-- File name, source-file facts and Clear all live in the header, so
+             the body below is free for the workbench. -->
+        <div class="card-head card-head-import">
             <h2>Import &amp; prepare</h2>
-            <span class="tag" id="fileTag">No file selected</span>
+            <div class="head-meta">
+                <span class="tag tag-file" id="fileTag" hidden></span>
+                <div class="meta-chips" id="metaChips" hidden></div>
+                <button class="btn btn-ghost btn-sm" id="clearFileBtn"
+                        type="button" hidden>Clear</button>
+            </div>
         </div>
 
         <div class="card-body">
@@ -45,18 +52,11 @@
                         or <b>browse</b> · .csv, .xlsx, .xlsb · up to 100 MB
                     </div>
                 </div>
-                <button class="btn btn-ghost btn-sm dz-clear" id="clearFileBtn"
-                        type="button" hidden>Clear</button>
             </div>
             <input id="fileInput" class="file-input" type="file"
                    accept=".csv,.xlsx,.xlsb">
 
             <!-- --------------------------------------------- what we found -->
-            <!-- The KPI strip is a direct child of the card body on purpose:
-                 sticky only holds while its containing block lasts, and the
-                 body spans the whole workbench below. -->
-            <div id="stats" class="stat-grid" hidden></div>
-
             <div id="profileCard" hidden>
                 <section class="opt-group">
                     <button class="group-toggle" type="button" aria-expanded="false"
@@ -75,7 +75,6 @@
                                         <th>Pandas dtype</th>
                                         <th>Missing</th>
                                         <th>Distinct</th>
-                                        <th>Sample</th>
                                         <th>Anomalies</th>
                                     </tr>
                                 </thead>

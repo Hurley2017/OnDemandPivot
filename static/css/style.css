@@ -478,17 +478,74 @@ code {
     overflow: visible;
 }
 
-/* The KPI strip pins itself under the header, so the numbers stay on screen
-   while the workbench below scrolls. Negative margins let it span the full
-   card width - otherwise content would scroll through the side gutters. */
-#stats {
+/* The card header carries the file name, the source-file facts and Clear, and
+   pins itself under the site header so they stay on screen while scrolling. */
+.card-head-import {
     position: sticky;
     top: var(--header-h);
     z-index: 15;
+    flex-wrap: wrap;
+    row-gap: 8px;
     background: var(--white);
-    margin: -4px -22px 10px;
-    padding: 14px 22px;
-    border-bottom: 1px solid var(--grey-200);
+}
+
+.head-meta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.tag-file {
+    text-transform: none;
+    letter-spacing: 0.02em;
+    font-size: 11.5px;
+    color: var(--black);
+    background: var(--grey-050);
+    border-color: var(--grey-300);
+    max-width: 340px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Compact source-file facts. */
+.meta-chips {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.meta-chip {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
+    font-size: 10.5px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--grey-600);
+    background: var(--grey-050);
+    border: 1px solid var(--grey-200);
+    border-radius: 10px;
+    padding: 3px 9px;
+    white-space: nowrap;
+}
+
+.meta-chip b {
+    font-size: 11.5px;
+    color: var(--black);
+}
+
+.meta-chip.is-alert {
+    background: var(--red-tint);
+    border-color: #f6c9cc;
+    color: var(--red-dark);
+}
+
+.meta-chip.is-alert b {
+    color: var(--red);
 }
 
 .card + .card {
@@ -749,10 +806,11 @@ table.data {
     white-space: nowrap;
 }
 
+/* One theme for every table in the app, matching the live preview. */
 table.data thead th {
     position: sticky;
     top: 0;
-    background: var(--black);
+    background: var(--red);
     color: var(--white);
     text-align: left;
     font-weight: 700;
@@ -761,7 +819,7 @@ table.data thead th {
     text-transform: uppercase;
     padding: 9px 12px;
     z-index: 2;
-    border-right: 1px solid var(--grey-800);
+    border-right: 1px solid var(--red-dark);
 }
 
 table.data tbody td {
@@ -1335,12 +1393,18 @@ table.data td.null {
     padding: 5px 12px;
 }
 
-/* HSBC red header, as requested for the live preview. */
 .workbench-preview table.data thead th {
     padding: 8px 12px;
-    background: var(--red);
-    color: var(--white);
-    border-right: 1px solid var(--red-dark);
+}
+
+/* Excel's own type, sitting under the kind badge. */
+.excel-kind {
+    display: block;
+    margin-top: 3px;
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--grey-400);
 }
 
 .workbench-preview .table-wrap {

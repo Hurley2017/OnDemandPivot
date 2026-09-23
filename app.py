@@ -795,6 +795,17 @@ def _safe_float(value):
     return round(out, 4)
 
 
+# Excel's own vocabulary, so the profile reads naturally to spreadsheet users.
+_EXCEL_KINDS = {
+    "number": "Number",
+    "string": "Text",
+    "category": "Text",
+    "datetime": "Date",
+    "timedelta": "Time",
+    "boolean": "Boolean",
+}
+
+
 def _profile_column(name: str, series: pd.Series, n_rows: int) -> dict:
     """Build the per-column KPI record: dtype, kind, missing, anomalies, stats."""
     kind = _column_kind(series)
@@ -890,6 +901,8 @@ def _profile_column(name: str, series: pd.Series, n_rows: int) -> dict:
         "name": str(name),
         "dtype": str(series.dtype),
         "kind": kind,
+        # What Excel would call this column, for people who think in Excel.
+        "excel": _EXCEL_KINDS.get(kind, "Text"),
         "missing": missing,
         "missing_pct": missing_pct,
         "unique": unique,
@@ -954,6 +967,10 @@ def _build_profile(df: pd.DataFrame, filename: str | None = None) -> dict:
     except OSError:
         file_bytes = 0
 
+    # Shape of the file itself, not of the frame being displayed. Fixed at
+    # upload time so restructuring never moves it.
+    source_shape = SESSION_DATA.get("source_shape") or [n_rows, n_cols]
+
     return {
         "filename": filename,
         "rows": n_rows,
@@ -980,6 +997,8 @@ def _build_profile(df: pd.DataFrame, filename: str | None = None) -> dict:
         "date_max": date_max,
         "memory_bytes": memory_bytes,
         "file_bytes": file_bytes,
+        "source_rows": int(source_shape[0]),
+        "source_cols": int(source_shape[1]),
     }
 
 
@@ -1172,6 +1191,12 @@ def _rebuild(options: dict) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
         has_header=options.get("has_header", True),
         sheet=options.get("sheet", ""),
     )
+    # The upload handler clears this before its first _rebuild(), which runs
+    # with every structural option at its default - so the first read really is
+    # the file's own shape. Later rebuilds leave it alone.
+    if SESSION_DATA.get("source_shape") is None:
+        SESSION_DATA["source_shape"] = [int(len(raw)), int(raw.shape[1])]
+
     cleaned = _apply_options(raw.copy(), options)
     cleaned = _infer_excel_serial_dates(cleaned)
     cleaned = _infer_datetimes(cleaned)
@@ -1220,6 +1245,10 @@ def upload():
     sheets = _list_sheets(path)
     if sheets:
         options["sheet"] = sheets[0]
+    # The file's own dimensions, captured before any restructuring. These stay
+    # fixed for the life of the upload, so the header can report the source
+    # while the preview reports the transformed frame.
+    SESSION_DATA["source_shape"] = None
     # _rebuild() reads from SESSION_DATA["path"], so register the new file
     # first; a parse failure clears it again below.
     SESSION_DATA.update(

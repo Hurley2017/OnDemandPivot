@@ -367,4 +367,27 @@ j = client.get("/api/session").get_json()
 print("  after process-> processed=%s" % j["processed"])
 assert j["processed"] is True
 
+# --- 15. source-file facts + Excel types ------------------------------------
+print("\nsource shape and Excel types:")
+up()
+p = client.post("/preview", json={}).get_json()["profile"]
+print("  source  %s x %s" % (p["source_rows"], p["source_cols"]))
+print("  cleaned %s x %s" % (p["rows"], p["cols"]))
+assert (p["source_rows"], p["source_cols"]) == (711, 16)
+assert (p["rows"], p["cols"]) == (700, 16)
+
+# Restructuring must not move the source shape.
+moved = client.post("/preview", json={"skip_rows": 3, "drop_empty_rows": False,
+                                      "dedupe": False}).get_json()["profile"]
+print("  after skip 3 -> source %s x %s, cleaned %s x %s"
+      % (moved["source_rows"], moved["source_cols"], moved["rows"], moved["cols"]))
+assert (moved["source_rows"], moved["source_cols"]) == (711, 16)
+assert moved["rows"] == 708
+
+excel = {f["excel"] for f in p["fields"]}
+print("  excel types present:", sorted(excel))
+assert excel <= {"Text", "Number", "Date", "Time", "Boolean"}
+assert "Text" in excel and "Number" in excel and "Date" in excel
+assert all("excel" in f for f in p["fields"])
+
 print("\nALL BACKEND TESTS PASSED")

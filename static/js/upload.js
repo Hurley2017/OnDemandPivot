@@ -148,38 +148,38 @@
 
     /* ---------------------------------------------------------- rendering */
 
+    /**
+     * The compact facts about the *source file*, shown in the card header.
+     * Rows and columns are the file's own shape, captured before any
+     * restructuring - the live preview reports the transformed frame, so the
+     * two never say the same thing twice.
+     */
     function renderStats(profile) {
-        const tiles = [
-            { label: "Rows", value: profile.rows, hint: "after restructuring" },
-            { label: "Columns", value: profile.cols, hint: "KPIs detected" },
+        const chips = [
+            { value: profile.source_rows, label: "rows" },
+            { value: profile.source_cols, label: "cols" },
             {
-                label: "Missing cells",
                 value: profile.missing_cells,
-                hint: profile.missing_pct + "% of dataset",
-                alert: profile.missing_pct > 0,
+                label: "missing",
+                alert: profile.missing_cells > 0,
             },
             {
-                label: "Duplicate rows",
                 value: profile.duplicate_rows,
-                hint: profile.duplicate_rows ? "consider removing" : "none found",
+                label: "dupes",
                 alert: profile.duplicate_rows > 0,
             },
             {
-                label: "Flagged columns",
                 value: profile.flagged_fields,
-                hint: profile.flagged_fields ? "review anomalies" : "all clean",
+                label: "flagged",
                 alert: profile.flagged_fields > 0,
             },
         ];
 
-        $("stats").innerHTML = tiles
+        $("metaChips").innerHTML = chips
             .map(
-                (t) => `
-            <div class="stat${t.alert ? " alert" : ""}">
-                <div class="stat-label">${escapeHtml(t.label)}</div>
-                <div class="stat-value">${escapeHtml(t.value)}</div>
-                <div class="stat-hint">${escapeHtml(t.hint)}</div>
-            </div>`
+                (c) =>
+                    `<span class="meta-chip${c.alert ? " is-alert" : ""}">` +
+                    `<b>${escapeHtml(c.value)}</b> ${escapeHtml(c.label)}</span>`
             )
             .join("");
     }
@@ -205,11 +205,13 @@
                 return `
                 <tr>
                     <td><b>${escapeHtml(f.name)}</b></td>
-                    <td><span class="badge ${badge}">${escapeHtml(f.kind)}</span></td>
+                    <td>
+                        <span class="badge ${badge}">${escapeHtml(f.kind)}</span>
+                        <span class="excel-kind">${escapeHtml(f.excel || "")}</span>
+                    </td>
                     <td>${escapeHtml(f.dtype)}</td>
                     <td class="${f.missing ? "num null" : "num"}">${escapeHtml(missingTxt)}</td>
                     <td class="num">${escapeHtml(f.unique)}</td>
-                    <td>${escapeHtml(f.sample == null ? "—" : f.sample)}</td>
                     <td>${issues}</td>
                 </tr>`;
             })
@@ -275,30 +277,38 @@
         renderStats(data.profile);
         renderProfile(data.profile);
         renderPreview(data.preview);
-        $("stats").hidden = false;
         profileCard.hidden = false;
         previewCard.hidden = false;
     }
 
     /** Hide everything that only exists once a file is loaded. */
     function hideLoaded() {
-        $("stats").hidden = true;
         profileCard.hidden = true;
         previewCard.hidden = true;
     }
 
     /* --------------------------------------------------------- upload flow */
 
-    /* The only place the file name is shown, now that the header is bare. */
+    /* The only place the file name is shown, now that the site header is bare. */
     function setFileTag(name, size) {
-        $("fileTag").textContent = name
-            ? name + (size ? ` · ${size}` : "")
-            : "No file selected";
+        const tag = $("fileTag");
+        if (!name) {
+            tag.hidden = true;
+            tag.textContent = "";
+            return;
+        }
+        tag.hidden = false;
+        tag.textContent = name + (size ? ` · ${size}` : "");
+        tag.title = name;
     }
 
+    /** Swap the drop zone for the file's facts once something is loaded. */
     function showLoaded(on) {
+        $("dropzone").hidden = on;
         $("clearFileBtn").hidden = !on;
         $("processBtn").hidden = !on;
+        $("fileTag").hidden = !on;
+        $("metaChips").hidden = !on;
     }
 
     /** Drop the selected file and everything derived from it. */
