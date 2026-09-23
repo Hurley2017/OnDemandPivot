@@ -52,9 +52,12 @@
                    accept=".csv,.xlsx,.xlsb">
 
             <!-- --------------------------------------------- what we found -->
-            <div id="profileCard" hidden>
-                <div id="stats" class="stat-grid"></div>
+            <!-- The KPI strip is a direct child of the card body on purpose:
+                 sticky only holds while its containing block lasts, and the
+                 body spans the whole workbench below. -->
+            <div id="stats" class="stat-grid" hidden></div>
 
+            <div id="profileCard" hidden>
                 <section class="opt-group">
                     <button class="group-toggle" type="button" aria-expanded="false"
                             aria-controls="grpProfile">

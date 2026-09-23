@@ -472,6 +472,25 @@ code {
     overflow: hidden;
 }
 
+/* Sticky children need an ancestor that does not clip. Everything inside this
+   card is inset by the body padding, so nothing reaches the rounded corners. */
+#importCard {
+    overflow: visible;
+}
+
+/* The KPI strip pins itself under the header, so the numbers stay on screen
+   while the workbench below scrolls. Negative margins let it span the full
+   card width - otherwise content would scroll through the side gutters. */
+#stats {
+    position: sticky;
+    top: var(--header-h);
+    z-index: 15;
+    background: var(--white);
+    margin: -4px -22px 10px;
+    padding: 14px 22px;
+    border-bottom: 1px solid var(--grey-200);
+}
+
 .card + .card {
     margin-top: 22px;
 }
@@ -1201,16 +1220,18 @@ table.data td.null {
    Workbench (controls + live preview)
    ========================================================================== */
 
-/* Both columns share one fixed height, so unfolding every option group
+/* The preview is the main stage: it fills the viewport left over by the pinned
+   header and the pinned KPI strip. The rail is narrower so the table gets the
+   width. Both columns share one height, so unfolding every option group
    scrolls inside the rail instead of stretching the card. */
 :root {
-    --workbench-h: 680px;
+    --workbench-h: max(520px, calc(100vh - 232px));
 }
 
 .workbench {
     display: grid;
-    grid-template-columns: minmax(300px, 400px) minmax(0, 1fr);
-    gap: 22px;
+    grid-template-columns: minmax(260px, 322px) minmax(0, 1fr);
+    gap: 20px;
     align-items: start;
 }
 

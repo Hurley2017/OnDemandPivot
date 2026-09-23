@@ -275,8 +275,16 @@
         renderStats(data.profile);
         renderProfile(data.profile);
         renderPreview(data.preview);
+        $("stats").hidden = false;
         profileCard.hidden = false;
         previewCard.hidden = false;
+    }
+
+    /** Hide everything that only exists once a file is loaded. */
+    function hideLoaded() {
+        $("stats").hidden = true;
+        profileCard.hidden = true;
+        previewCard.hidden = true;
     }
 
     /* --------------------------------------------------------- upload flow */
@@ -300,8 +308,7 @@
         } catch (_err) {
             /* the local UI is cleared either way */
         }
-        profileCard.hidden = true;
-        previewCard.hidden = true;
+        hideLoaded();
         fileInput.value = "";
         applyOptions(null);
         showLoaded(false);
