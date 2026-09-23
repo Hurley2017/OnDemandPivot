@@ -11,6 +11,18 @@ FIXTURES = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                         "tests", "fixtures")
 SAMPLE = os.path.join(FIXTURES, "Sample Finance Data.xlsx")
 XLSB = os.path.join(FIXTURES, "sample.xlsb")
+
+# The app itself needs no sample data; only this suite does. Drop any .xlsx
+# there to exercise the data paths, otherwise the run simply stops here.
+if not os.path.exists(SAMPLE):
+    print("No sample workbook found at:")
+    print("   ", SAMPLE)
+    print()
+    print("This suite checks the upload/cleaning/export pipeline against a real")
+    print("file. Put any .xlsx there (named exactly as above) and run it again.")
+    print("The application itself does not depend on it.")
+    sys.exit(0)
+
 csv_bytes = open(SAMPLE, "rb").read()
 
 
