@@ -33,17 +33,20 @@ const escapeHtml = window.CPA.escapeHtml;
 
 const state = {
     plugin: "Datagrid",
-    // The live view configuration. These mirror whatever the user has built in
-    // Perspective's own Pivot panel, so switching views never discards work.
+    // The live view configuration. These mirror whatever the user has built on
+    // the shelves (or that the AI assistant has applied), so switching views
+    // never discards work.
     groupBy: [],
     splitBy: [],
     columns: [],
     filter: [],
     sort: [],
+    aggregates: {},    // column -> Perspective aggregate name
     fields: [],        // [{name, kind, ...}] from /api/kpis
     schema: [],        // raw column names in frame order
     numeric: [],       // subset of schema
     categorical: [],   // string/category/date columns — chart grouping axes
+    dates: [],         // subset of schema, for the field list's type hint
     selectedKpi: null,
     registered: [],    // plugin names Perspective actually exposes
     profile: null,
@@ -221,37 +224,492 @@ function fillSelect(select, options, includeAllLabel) {
 }
 
 function buildToolbar() {
-    const all = state.schema;
-
-    fillSelect($("groupBy"), all, "— none —");
-    fillSelect($("splitBy"), all, "— none —");
-    fillSelect($("measure"), state.numeric.length ? state.numeric : all, "— all —");
-
-    $("groupBy").addEventListener("change", async (e) => {
-        state.groupBy = e.target.value ? [e.target.value] : [];
-        await refreshView();
-    });
-
-    $("splitBy").addEventListener("change", async (e) => {
-        state.splitBy = e.target.value ? [e.target.value] : [];
-        await refreshView();
-    });
-
-    $("measure").addEventListener("change", async (e) => {
-        state.columns = e.target.value ? [e.target.value] : [];
-        await refreshView();
-    });
-
-    $("settingsBtn").addEventListener("click", async () => {
-        try {
-            await $("viewer").toggleConfig();
-        } catch (_err) {
-            /* panel may already be in the requested state */
-        }
-    });
-
     $("resetBtn").addEventListener("click", resetView);
     $("downloadBtn").addEventListener("click", downloadCurrentView);
+}
+
+/* ------------------------------------------------------- fields panel */
+
+/**
+ * The pivot builder.
+ *
+ * Perspective's own panel is hidden, so this is the only place a view can be
+ * shaped. Shelves hold ordered column lists; the Values shelf additionally
+ * carries a per-column aggregate. Every change is pushed straight back into the
+ * viewer through refreshView(), and anything the user does inside the viewer
+ * (including the AI assistant reconfiguring it) flows back through
+ * syncToolbarFromConfig().
+ */
+
+/** Aggregates Perspective accepts, in the order a person is likely to want them. */
+const AGGREGATES = [
+    ["sum", "Sum"],
+    ["avg", "Average"],
+    ["count", "Count"],
+    ["count_distinct", "Distinct"],
+    ["min", "Min"],
+    ["max", "Max"],
+    ["median", "Median"],
+    ["stddev", "Std dev"],
+    ["var", "Variance"],
+    ["first", "First"],
+    ["last", "Last"],
+    ["unique", "Unique"],
+];
+
+const NUMERIC_AGGREGATES = new Set([
+    "sum", "avg", "median", "stddev", "var",
+]);
+
+const SHELF_LABELS = {
+    group: "Group by",
+    split: "Split by",
+    values: "Values",
+};
+
+/** Which shelves a column may be dropped on. */
+function shelfAccepts(shelf, column) {
+    const isNumeric = state.numeric.includes(column);
+    if (shelf === "values") return isNumeric;
+    // Grouping axes are meaningful for text and dates, not measures.
+    return !isNumeric || shelf === "group";
+}
+
+/** The aggregate a value column should use when first dropped. */
+function defaultAggregate(column) {
+    return state.numeric.includes(column) ? "sum" : "count";
+}
+
+function aggregateFor(column) {
+    const chosen = (state.aggregates || {})[column];
+    return chosen || defaultAggregate(column);
+}
+
+/** Drop aggregates for columns that are no longer on the Values shelf. */
+function pruneAggregates() {
+    const keep = new Set(state.columns);
+    Object.keys(state.aggregates || {}).forEach((key) => {
+        if (!keep.has(key)) delete state.aggregates[key];
+    });
+}
+
+/* ---- rendering ---- */
+
+function renderFieldList() {
+    const list = $("fieldList");
+    if (!list) return;
+    const term = ($("fieldSearch").value || "").trim().toLowerCase();
+    const used = new Set([
+        ...state.groupBy, ...state.splitBy, ...state.columns,
+    ]);
+
+    list.textContent = "";
+    const matches = state.schema.filter(
+        (name) => !term || name.toLowerCase().includes(term)
+    );
+
+    $("fieldsCount").textContent =
+        term ? `${matches.length} of ${state.schema.length}` : `${state.schema.length}`;
+
+    if (!matches.length) {
+        const empty = document.createElement("p");
+        empty.className = "fields-hint";
+        empty.textContent = "No column matches that.";
+        list.appendChild(empty);
+        return;
+    }
+
+    matches.forEach((name) => {
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "field-chip" + (used.has(name) ? " is-used" : "");
+        chip.draggable = true;
+        chip.dataset.column = name;
+
+        const label = document.createElement("span");
+        label.textContent = name;
+        chip.appendChild(label);
+
+        const kind = document.createElement("span");
+        const k = state.numeric.includes(name)
+            ? "number"
+            : state.dates && state.dates.includes(name) ? "datetime" : "string";
+        kind.className = "kind " + k;
+        kind.textContent = k === "number" ? "num" : k === "datetime" ? "date" : "text";
+        chip.appendChild(kind);
+
+        chip.addEventListener("dragstart", (e) => {
+            e.dataTransfer.setData("text/plain", name);
+            e.dataTransfer.effectAllowed = "copy";
+            chip.classList.add("dragging");
+        });
+        chip.addEventListener("dragend", () => chip.classList.remove("dragging"));
+        // Double-click sends it to the first shelf that will take it.
+        chip.addEventListener("dblclick", () => {
+            const shelf = ["group", "values", "split"].find((s) =>
+                shelfAccepts(s, name)
+            );
+            if (shelf) addToShelf(shelf, name);
+        });
+
+        list.appendChild(chip);
+    });
+}
+
+function renderShelves() {
+    const shelves = {
+        group: { el: $("shelfGroup"), cols: state.groupBy },
+        split: { el: $("shelfSplit"), cols: state.splitBy },
+        values: { el: $("shelfValues"), cols: state.columns },
+    };
+
+    Object.entries(shelves).forEach(([key, { el, cols }]) => {
+        if (!el) return;
+        el.textContent = "";
+
+        if (!cols.length) {
+            const empty = document.createElement("span");
+            empty.className = "shelf-empty";
+            empty.textContent = el.dataset.empty || {
+                group: "Drop columns here to group rows",
+                split: "Drop columns here to split series",
+                values: "Drop measures here to aggregate",
+            }[key];
+            el.appendChild(empty);
+            return;
+        }
+
+        cols.forEach((name, index) => {
+            const chip = document.createElement("div");
+            chip.className = "shelf-chip";
+            chip.draggable = true;
+            chip.dataset.column = name;
+            chip.dataset.shelf = key;
+            chip.dataset.index = String(index);
+
+            const label = document.createElement("span");
+            label.className = "name";
+            label.textContent = name;
+            label.title = name;
+            chip.appendChild(label);
+
+            if (key === "values") {
+                const select = document.createElement("select");
+                select.title = "Aggregate";
+                AGGREGATES.forEach(([value, text]) => {
+                    if (NUMERIC_AGGREGATES.has(value) &&
+                        !state.numeric.includes(name)) return;
+                    const opt = document.createElement("option");
+                    opt.value = value;
+                    opt.textContent = text;
+                    select.appendChild(opt);
+                });
+                select.value = aggregateFor(name);
+                select.addEventListener("change", () => {
+                    state.aggregates = state.aggregates || {};
+                    state.aggregates[name] = select.value;
+                    refreshView();
+                });
+                chip.appendChild(select);
+            }
+
+            const drop = document.createElement("button");
+            drop.type = "button";
+            drop.className = "drop";
+            drop.textContent = "\u00d7";
+            drop.setAttribute("aria-label", `Remove ${name}`);
+            drop.addEventListener("click", () => removeFromShelf(key, name));
+            chip.appendChild(drop);
+
+            chip.addEventListener("dragstart", (e) => {
+                e.dataTransfer.setData("text/plain", name);
+                e.dataTransfer.setData("application/x-shelf", key);
+                e.dataTransfer.effectAllowed = "move";
+                chip.classList.add("is-dragging");
+            });
+            chip.addEventListener("dragend", () => chip.classList.remove("is-dragging"));
+
+            el.appendChild(chip);
+        });
+    });
+
+    renderPills();
+}
+
+function renderPills() {
+    const set = (pillId, valueId, values, emptyLabel) => {
+        const pill = $(pillId);
+        const value = $(valueId);
+        if (!pill || !value) return;
+        const has = values.length > 0;
+        pill.classList.toggle("is-set", has);
+        value.textContent = has
+            ? values.length > 2
+                ? `${values.slice(0, 2).join(", ")} +${values.length - 2}`
+                : values.join(", ")
+            : emptyLabel;
+    };
+
+    set("pillGroup", "pillGroupValue", state.groupBy, "\u2014 none \u2014");
+    set("pillSplit", "pillSplitValue", state.splitBy, "\u2014 none \u2014");
+    set("pillValues", "pillValuesValue", state.columns, "\u2014 all \u2014");
+}
+
+/** Human text for one filter condition. */
+function renderRules() {
+    const filterList = $("filterList");
+    const sortList = $("sortList");
+    if (!filterList || !sortList) return;
+
+    filterList.textContent = "";
+    if (!state.filter.length) {
+        const empty = document.createElement("div");
+        empty.className = "rule-empty";
+        empty.textContent = "No filters — every row is included.";
+        filterList.appendChild(empty);
+    } else {
+        state.filter.forEach((cond, i) => {
+            filterList.appendChild(buildFilterRow(cond, i));
+        });
+    }
+
+    sortList.textContent = "";
+    if (!state.sort.length) {
+        const empty = document.createElement("div");
+        empty.className = "rule-empty";
+        empty.textContent = "No sort — rows keep their natural order.";
+        sortList.appendChild(empty);
+    } else {
+        state.sort.forEach((spec, i) => {
+            sortList.appendChild(buildSortRow(spec, i));
+        });
+    }
+}
+
+function buildFilterRow(cond, index) {
+    const row = document.createElement("div");
+    row.className = "rule-row";
+
+    const column = document.createElement("select");
+    state.schema.forEach((name) => {
+        const opt = document.createElement("option");
+        opt.value = name;
+        opt.textContent = name;
+        column.appendChild(opt);
+    });
+    column.value = cond[0];
+    row.appendChild(column);
+
+    const op = document.createElement("select");
+    [["==", "="], ["!=", "\u2260"], [">", ">"], ["<", "<"],
+     [">=", "\u2265"], ["<=", "\u2264"], ["contains", "has"],
+     ["begins with", "starts"]].forEach(([value, text]) => {
+        const opt = document.createElement("option");
+        opt.value = value;
+        opt.textContent = text;
+        op.appendChild(opt);
+    });
+    op.value = cond[1] || "==";
+    row.appendChild(op);
+
+    const value = document.createElement("input");
+    value.type = "text";
+    value.value = cond[2] === undefined || cond[2] === null ? "" : String(cond[2]);
+    value.placeholder = "value";
+    row.appendChild(value);
+
+    const commit = () => {
+        const raw = value.value;
+        const asNumber = Number(raw);
+        const cast = raw !== "" && !Number.isNaN(asNumber) &&
+            state.numeric.includes(column.value)
+            ? asNumber
+            : raw;
+        state.filter[index] = [column.value, op.value, cast];
+        refreshView();
+    };
+    column.addEventListener("change", commit);
+    op.addEventListener("change", commit);
+    value.addEventListener("change", commit);
+
+    const drop = document.createElement("button");
+    drop.type = "button";
+    drop.className = "drop";
+    drop.textContent = "\u00d7";
+    drop.setAttribute("aria-label", "Remove filter");
+    drop.addEventListener("click", () => {
+        state.filter.splice(index, 1);
+        refreshView();
+    });
+    row.appendChild(drop);
+    return row;
+}
+
+function buildSortRow(spec, index) {
+    const row = document.createElement("div");
+    row.className = "rule-row";
+
+    const column = document.createElement("select");
+    state.schema.forEach((name) => {
+        const opt = document.createElement("option");
+        opt.value = name;
+        opt.textContent = name;
+        column.appendChild(opt);
+    });
+    column.value = spec[0];
+    row.appendChild(column);
+
+    const dir = document.createElement("select");
+    [["asc", "Ascending"], ["desc", "Descending"]].forEach(([value, text]) => {
+        const opt = document.createElement("option");
+        opt.value = value;
+        opt.textContent = text;
+        dir.appendChild(opt);
+    });
+    dir.value = spec[1] || "asc";
+    row.appendChild(dir);
+
+    const commit = () => {
+        state.sort[index] = [column.value, dir.value];
+        refreshView();
+    };
+    column.addEventListener("change", commit);
+    dir.addEventListener("change", commit);
+
+    const drop = document.createElement("button");
+    drop.type = "button";
+    drop.className = "drop";
+    drop.textContent = "\u00d7";
+    drop.setAttribute("aria-label", "Remove sort");
+    drop.addEventListener("click", () => {
+        state.sort.splice(index, 1);
+        refreshView();
+    });
+    row.appendChild(drop);
+    return row;
+}
+
+/* ---- shelf mutations ---- */
+
+function addToShelf(shelf, column) {
+    const key = shelf === "values" ? "columns" : shelf === "group" ? "groupBy" : "splitBy";
+    if (state[key].includes(column)) return;
+    state[key].push(column);
+    if (shelf === "values") {
+        state.aggregates = state.aggregates || {};
+        state.aggregates[column] = defaultAggregate(column);
+    }
+    refreshView();
+}
+
+function removeFromShelf(shelf, column) {
+    const key = shelf === "values" ? "columns" : shelf === "group" ? "groupBy" : "splitBy";
+    state[key] = state[key].filter((c) => c !== column);
+    if (shelf === "values") pruneAggregates();
+    refreshView();
+}
+
+function moveToShelf(shelf, column, index) {
+    const key = shelf === "values" ? "columns" : shelf === "group" ? "groupBy" : "splitBy";
+    // Take it off whichever shelf currently holds it, then insert at the target.
+    ["groupBy", "splitBy", "columns"].forEach((k) => {
+        state[k] = state[k].filter((c) => c !== column);
+    });
+    pruneAggregates();
+
+    const target = state[key];
+    const at = Math.max(0, Math.min(index ?? target.length, target.length));
+    target.splice(at, 0, column);
+
+    if (shelf === "values") {
+        state.aggregates = state.aggregates || {};
+        if (!state.aggregates[column]) state.aggregates[column] = defaultAggregate(column);
+    }
+    refreshView();
+}
+
+function initFields() {
+    const dock = $("fieldsDock");
+    const layout = $("dashLayout");
+    const btn = $("fieldsBtn");
+    if (!dock || !layout || !btn) return;
+
+    const setOpen = (open) => {
+        dock.hidden = !open;
+        layout.classList.toggle("fields-open", open);
+        btn.setAttribute("aria-expanded", open ? "true" : "false");
+        if (open) renderFieldList();
+    };
+
+    btn.addEventListener("click", () => setOpen(dock.hidden));
+    $("fieldsClose").addEventListener("click", () => setOpen(false));
+    // The summary pills are the fast way in, and open the matching shelf.
+    ["pillGroup", "pillSplit", "pillValues"].forEach((id) => {
+        $(id).addEventListener("click", () => {
+            setOpen(true);
+            const shelf = $(id).dataset.shelf;
+            const target = $("shelf" + shelf.charAt(0).toUpperCase() + shelf.slice(1));
+            if (target) {
+                target.scrollIntoView({ block: "nearest", behavior: "smooth" });
+                target.classList.add("is-over");
+                setTimeout(() => target.classList.remove("is-over"), 700);
+            }
+        });
+    });
+
+    $("fieldSearch").addEventListener("input", renderFieldList);
+
+    $("addFilter").addEventListener("click", () => {
+        state.filter.push([state.schema[0], "==", ""]);
+        refreshView();
+    });
+    $("addSort").addEventListener("click", () => {
+        state.sort.push([state.groupBy[0] || state.schema[0], "asc"]);
+        refreshView();
+    });
+
+    // Every shelf is a drop target; dropping onto a chip inserts before it.
+    [["shelfGroup", "group"], ["shelfSplit", "split"], ["shelfValues", "values"]]
+        .forEach(([id, shelf]) => {
+            const el = $(id);
+            if (!el) return;
+
+            el.addEventListener("dragover", (e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect =
+                    e.dataTransfer.types.includes("application/x-shelf")
+                        ? "move" : "copy";
+                el.classList.add("is-over");
+            });
+            el.addEventListener("dragleave", (e) => {
+                if (!el.contains(e.relatedTarget)) el.classList.remove("is-over");
+            });
+            el.addEventListener("drop", (e) => {
+                e.preventDefault();
+                el.classList.remove("is-over");
+                const column = e.dataTransfer.getData("text/plain");
+                if (!column || !state.schema.includes(column)) return;
+
+                const chip = e.target.closest(".shelf-chip");
+                const index = chip ? Number(chip.dataset.index) : state[
+                    shelf === "values" ? "columns"
+                        : shelf === "group" ? "groupBy" : "splitBy"
+                ].length;
+
+                if (chip && chip.dataset.shelf === shelf) {
+                    moveToShelf(shelf, column, index);
+                } else if (shelfAccepts(shelf, column)) {
+                    moveToShelf(shelf, column, index);
+                } else {
+                    toast(
+                        shelf === "values"
+                            ? `${column} is not a measure — Values only takes numbers.`
+                            : `${column} is a measure — put it on Values instead.`,
+                        "warn"
+                    );
+                }
+            });
+        });
 }
 
 /* ---------------------------------------------------------- palette UI */
@@ -352,20 +810,32 @@ function syncToolbarFromConfig(cfg) {
     if (!cfg) return;
     state.groupBy = Array.isArray(cfg.group_by) ? cfg.group_by : [];
     state.splitBy = Array.isArray(cfg.split_by) ? cfg.split_by : [];
-    state.columns = Array.isArray(cfg.columns) ? cfg.columns : [];
+
+    // The Values shelf only holds a *deliberate* selection. A flat grid reports
+    // every remaining column, and a chart reports its plotted measures; the
+    // former is just the default, so adopting it would silently fill the shelf
+    // with columns the user never chose.
+    const onAxes = new Set([...state.groupBy, ...state.splitBy]);
+    const rest = state.schema.filter((c) => !onAxes.has(c));
+    const cols = Array.isArray(cfg.columns) ? cfg.columns : [];
+    const isDefault = rest.length > 0 && rest.every((c) => cols.includes(c));
+    state.columns = isDefault ? [] : cols;
+
     state.filter = Array.isArray(cfg.filter) ? cfg.filter : [];
     state.sort = Array.isArray(cfg.sort) ? cfg.sort : [];
 
-    const pick = (el, values) => {
-        if (!el) return;
-        const first = values[0] || "";
-        const has = [...el.options].some((o) => o.value === first);
-        el.value = has ? first : "";
-    };
-    pick($("groupBy"), state.groupBy);
-    pick($("splitBy"), state.splitBy);
-    pick($("measure"), state.columns.length === 1 ? state.columns : []);
-    window.CPA.refreshSelects();
+    // Keep our aggregate choice when the incoming config omits it — the viewer
+    // only reports aggregates it considers non-default.
+    const incoming = cfg.aggregates || {};
+    const merged = {};
+    state.columns.forEach((c) => {
+        merged[c] = incoming[c] || (state.aggregates || {})[c] || defaultAggregate(c);
+    });
+    state.aggregates = merged;
+
+    renderShelves();
+    renderRules();
+    renderFieldList();
 }
 
 /* ------------------------------------------------------------- palette */
@@ -465,24 +935,28 @@ function paintViewer(viewer, colors) {
 }
 
 /**
- * HSBC-brand the grid's column headers.
+ * Make the grid look exactly like the import page's preview table.
  *
- * v5 renders the header cells inside the datagrid plugin's shadow root and
- * exposes no custom property for their background, so a stylesheet is injected
- * there instead. Custom properties would inherit, but the whole look (weight,
- * casing, sort icons) has to travel with it. Injected once per shadow root and
- * keyed with a marker attribute so it is never added twice.
+ * v5 renders the cells inside the datagrid plugin's shadow root and exposes no
+ * custom property for their chrome, so a stylesheet is injected there instead.
+ * The header and body rules mirror `table.data` in style.css; the zebra stripe
+ * and row height are read from custom properties when the plugin paints, so
+ * those go on :host.
+ *
+ * Injected once per shadow root, keyed with a marker attribute.
  */
-const GRID_HEADER_CSS = `
+const GRID_THEME_CSS = `
+/* ---- header: mirrors table.data thead th ---- */
 thead th {
     background: #db0011 !important;
     color: #ffffff !important;
     font-weight: 700 !important;
     font-size: 10.5px !important;
-    letter-spacing: 0.06em !important;
+    letter-spacing: 0.08em !important;
     text-transform: uppercase !important;
     border-bottom: 1px solid #b5000e !important;
-    border-right: 1px solid rgba(255, 255, 255, 0.18) !important;
+    border-right: 1px solid #b5000e !important;
+    padding: 0 12px !important;
 }
 thead th:hover {
     background: #b5000e !important;
@@ -491,6 +965,28 @@ thead th :is(.psp-header-sort-asc, .psp-header-sort-desc,
              .psp-header-sort-col-asc, .psp-header-sort-col-desc)::after {
     background-color: #ffffff !important;
 }
+
+/* ---- body: mirrors table.data tbody td ---- */
+tbody td,
+tbody th {
+    padding: 0 12px !important;
+    border-bottom: 1px solid #e2e2e2 !important;
+    border-right: 1px solid #f2f2f2 !important;
+    color: #1a1a1a !important;
+}
+tbody tr:hover td,
+tbody tr:hover th {
+    background-color: #fff2f3 !important;
+}
+
+/* Values the plugin reads when it paints. */
+:host {
+    --psp-datagrid--zebra--color: #fafafa;
+    --psp-datagrid--row--height: 30px;
+    --psp-datagrid--border-color: #e2e2e2;
+    --psp-datagrid--hover--border-color: #e2e2e2;
+}
+
 /* v5 shows an inline-edit row under the headers. This app is read-only, so the
    affordance is hidden rather than left as a row of inert EDIT buttons. */
 regular-table #psp-column-edit-buttons {
@@ -498,15 +994,15 @@ regular-table #psp-column-edit-buttons {
 }
 `;
 
-function styleGridHeaders() {
+function styleGrid() {
     const grid = [...$("viewer").children].find((el) =>
         el.tagName.toLowerCase().startsWith("perspective-viewer-datagrid")
     );
     const root = grid && grid.shadowRoot;
-    if (!root || root.querySelector("style[data-hsbc-headers]")) return;
+    if (!root || root.querySelector("style[data-hsbc-grid]")) return;
     const style = document.createElement("style");
-    style.setAttribute("data-hsbc-headers", "1");
-    style.textContent = GRID_HEADER_CSS;
+    style.setAttribute("data-hsbc-grid", "1");
+    style.textContent = GRID_THEME_CSS;
     root.appendChild(style);
 }
 
@@ -555,6 +1051,9 @@ function rawViewConfig(spec) {
     const group = state.groupBy.length ? state.groupBy : [];
     const groupAxis = group.length ? group : firstCategorical() ? [firstCategorical()] : [];
     const split = state.splitBy;
+    const aggregates = Object.keys(state.aggregates || {}).length
+        ? state.aggregates
+        : undefined;
 
     if (spec.kind === "grid") {
         return {
@@ -564,6 +1063,10 @@ function rawViewConfig(spec) {
             columns: state.columns.length ? state.columns : state.schema.slice(),
             filter: state.filter,
             sort: state.sort,
+            aggregates,
+            // Zebra is a row *count*: 1 means every other row, matching what the
+            // import page's preview table does with :nth-child(even).
+            plugin_config: { zebra_rows: 1 },
         };
     }
 
@@ -580,6 +1083,7 @@ function rawViewConfig(spec) {
             columns,
             filter: state.filter,
             sort: state.sort,
+            aggregates,
         };
     }
 
@@ -603,6 +1107,7 @@ function rawViewConfig(spec) {
             columns: [x, ...ys],
             filter: state.filter,
             sort: state.sort,
+            aggregates,
         };
     }
 
@@ -621,6 +1126,7 @@ function rawViewConfig(spec) {
             columns: [columns[0]],
             filter: state.filter,
             sort: state.sort,
+            aggregates,
         };
     }
 
@@ -702,7 +1208,7 @@ function attachViewerEvents(viewer) {
         if (cfg.plugin) state.plugin = cfg.plugin;
         syncToolbarFromConfig(cfg);
         markActiveView();
-        styleGridHeaders();
+        styleGrid();
     });
 }
 
@@ -736,7 +1242,7 @@ async function rebuildViewer(restoreConfig) {
         table: TABLE_NAME,
     };
     await fresh.restore(next);
-    styleGridHeaders();
+    styleGrid();
 
     state.config = next;
     state.plugin = next.plugin || "Datagrid";
@@ -754,7 +1260,7 @@ async function applyConfig(next) {
     try {
         await $("viewer").restore(next);
         state.config = next;
-        styleGridHeaders();
+        styleGrid();
         setStatus("Ready");
         return true;
     } catch (err) {
@@ -781,12 +1287,13 @@ async function resetView() {
     state.columns = [];
     state.filter = [];
     state.sort = [];
-    $("groupBy").value = "";
-    $("splitBy").value = "";
-    $("measure").value = "";
+    state.aggregates = {};
     state.plugin = "Datagrid";
     markActiveView();
     await applyConfig(buildViewConfig(specFor("Datagrid")));
+    renderShelves();
+    renderRules();
+    renderFieldList();
     toast("View reset to the flat grid.", "info");
 }
 
@@ -806,6 +1313,9 @@ function renderKpiList(profile) {
                 f.kind === "category" ||
                 f.kind === "datetime"
         )
+        .map((f) => f.name);
+    state.dates = state.fields
+        .filter((f) => f.kind === "datetime")
         .map((f) => f.name);
 
     $("kpiTag").textContent = `${state.fields.length} KPIs`;
@@ -1068,7 +1578,7 @@ async function loadPerspective() {
 
     const initial = buildViewConfig(specFor("Datagrid"));
     await viewer.restore(initial);
-    styleGridHeaders();
+    styleGrid();
     setStatus("Ready");
     state.ready = true;
 }
@@ -1268,14 +1778,26 @@ async function downloadCurrentView() {
 
 const CHAT_STORE_KEY = "cpa.chat.config.v1";
 
-/* Credentials live only in this browser's localStorage and are sent to the
-   local Flask proxy — never anywhere else, and never written server-side. */
+/* Credentials live only in this browser's localStorage, and go straight from
+   this page to the endpoint the user names — never to this app's server. */
 function readChatConfig() {
     return {
         endpoint: ($("chatEndpoint").value || "").trim(),
         api_key: ($("chatKey").value || "").trim(),
         model: ($("chatModel").value || "").trim(),
     };
+}
+
+/**
+ * v5's agent wants a full chat-completions URL, while people naturally type a
+ * base URL. Accept either: anything already ending in /chat/completions is used
+ * as-is, and a bare base gets the path appended.
+ */
+function chatEndpointUrl(endpoint) {
+    const url = (endpoint || "").trim().replace(/\/+$/, "");
+    if (!url) return url;
+    if (/\/chat\/completions$/.test(url)) return url;
+    return `${url}/chat/completions`;
 }
 
 function chatHasCredentials() {
@@ -1307,8 +1829,9 @@ function setChatMode() {
         label = "Model connected";
         chip = "Connected";
         note =
-            "Connected. Answers come from your endpoint — data leaves this " +
-            "machine only if that endpoint is remote.";
+            "Connected. The assistant reads this dataset and can build pivots " +
+            "and charts for you — data leaves this machine only if the endpoint " +
+            "above is remote.";
     } else if (state.chatVerified === false) {
         live = false;
         label = "Connection failed";
@@ -1453,38 +1976,33 @@ function initChat() {
         if (cfg.endpoint || cfg.api_key || cfg.model) saveChatConfig();
 
         try {
-            const resp = await fetch("/api/chat", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    query,
-                    endpoint: cfg.endpoint,
-                    api_key: cfg.api_key,
-                    model: cfg.model,
-                }),
+            // v5 ships the assistant: point it at the endpoint and ask. It is a
+            // tool-calling agent, so it reads the schema and can reconfigure the
+            // view itself — the answer can be a pivot, not just prose.
+            const viewer = $("viewer");
+            viewer.agentConfig({
+                url: chatEndpointUrl(cfg.endpoint),
+                apiKey: cfg.api_key || "",
+                model: cfg.model || "default",
             });
-            const data = await resp.json().catch(() => ({}));
-            typing.remove();
+            const reply = await viewer.agentPrompt(query);
 
-            if (data.success && !data.placeholder) {
-                state.chatVerified = true;
-                state.chatError = "";
-            } else if (!data.success) {
-                state.chatVerified = false;
-                state.chatError = data.error || "The model did not answer.";
-            }
+            typing.remove();
+            state.chatVerified = true;
+            state.chatError = "";
             setChatMode();
 
-            addMessage(
-                data.success ? data.reply : data.error || "Something went wrong.",
-                "bot"
-            );
+            const text = typeof reply === "string" ? reply : String(reply ?? "");
+            addMessage(text.trim() || "(the model returned an empty reply)", "bot");
+
+            // The agent may have reconfigured the view; perspective-config-update
+            // fires for that, so the toolbar is already back in step.
         } catch (err) {
             typing.remove();
             state.chatVerified = false;
-            state.chatError = "Could not reach the local server.";
+            state.chatError = (err && err.message) || "The model did not answer.";
             setChatMode();
-            addMessage("Could not reach the local server.", "bot");
+            addMessage(state.chatError, "bot");
         }
     }
 
@@ -1553,8 +2071,12 @@ async function main() {
     try {
         await loadKpis();
         buildToolbar();
+        initFields();
         await renderViewSelect();
         await loadPerspective();
+        renderFieldList();
+        renderShelves();
+        renderRules();
         window.CPA.enhanceSelects();
     } catch (err) {
         fail(err && err.message ? err.message : String(err));

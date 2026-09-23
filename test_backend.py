@@ -4,6 +4,7 @@ import os
 import sys
 
 import app as m
+import pandas as pd
 import pyarrow as pa
 
 client = m.app.test_client()
@@ -125,40 +126,12 @@ print("  Date arrow type:", tbl.schema.field(di).type)
 assert "timestamp" in str(tbl.schema.field(di).type), tbl.schema.field(di).type
 
 # --- 5. chat ---------------------------------------------------------------
+# The assistant is Perspective v5's built-in agent, driven from the browser
+# (viewer.agentConfig / viewer.agentPrompt). It no longer routes through Flask,
+# so the only thing to assert here is that the old proxy is really gone.
 r = client.post("/api/chat", json={"query": "hi"})
-j = r.get_json()
-print("\nchat no creds ->", r.status_code, j)
-assert j.get("placeholder") and "No model is connected" in j["reply"]
-
-for payload in [
-    {"query": "", "endpoint": "x", "api_key": "y"},
-    {"query": "hi", "endpoint": "  ", "api_key": "  "},
-    {"query": "hi", "endpoint": "", "api_key": "sk-something"},
-]:
-    r = client.post("/api/chat", json=payload)
-    print("chat ->", payload, "=>", r.status_code, r.get_json())
-
-# Unreachable endpoint must fail gracefully with 502, not blow up.
-r = client.post("/api/chat", json={
-    "query": "hi",
-    "endpoint": "http://127.0.0.1:9/v1",
-    "api_key": "sk-test",
-})
-j = r.get_json()
-print("chat bad endpoint ->", r.status_code, str(j)[:160])
-assert r.status_code == 502 and j["success"] is False
-
-# Endpoint normalisation (base URL, full URL, bare host, trailing slash).
-for e, want in [
-    ("https://api.openai.com/v1", "https://api.openai.com/v1/chat/completions"),
-    ("https://api.openai.com/v1/chat/completions", "https://api.openai.com/v1/chat/completions"),
-    ("https://api.openai.com/v1/", "https://api.openai.com/v1/chat/completions"),
-    ("api.openai.com/v1", "https://api.openai.com/v1/chat/completions"),
-]:
-    got = m._normalise_chat_endpoint(e)
-    status = "ok " if got == want else "FAIL"
-    print("  %s %-45s -> %s" % (status, e, got))
-    assert got == want, (e, got, want)
+print("\nold /api/chat proxy ->", r.status_code, "(404 = removed)")
+assert r.status_code == 404
 
 # --- 6. dashboard still renders with logo/title -----------------------------
 print("\ndashboard ->", client.get("/dashboard").status_code)
@@ -174,8 +147,7 @@ print("  no sample-data button:", 'id="sampleBtn"' not in html)
 print("  accepts xlsb:", ".xlsb" in html)
 
 # --- 7. open-ended Excel ranges ---------------------------------------------
-print("\nopen-ended ranges:")
-# Cleaning is disabled so the shapes reflect the range alone (raw = 711 rows).
+print("\nopen-ended ranges:")# Cleaning is disabled so the shapes reflect the range alone (raw = 711 rows).
 RAW = {"drop_empty_rows": False, "drop_empty_cols": False, "dedupe": False,
        "strip_whitespace": False}
 for spec, want_cols, want_rows in [
@@ -200,6 +172,48 @@ for bad in ["not-a-range", "A:B:C", ":", "A1:2B"]:
         raise AssertionError("expected a ValueError for %r" % bad)
     except ValueError as exc:
         print("  rejected %-12s -> %s" % (bad, exc))
+
+# --- 7b. text-encoded numbers ------------------------------------------------
+# Real financial statements store figures as text with currency symbols,
+# accounting negatives and nil markers, and interleave section headings with
+# the data. The coercer must rescue those columns without touching free text.
+print("\ntext-encoded numbers:")
+COERCE_CASES = [
+    # (label, values, expected numeric values or None to refuse)
+    ("plain integers", ["1", "2", "3"], [1.0, 2.0, 3.0]),
+    ("thousands separators", ["1,234", "5,678"], [1234.0, 5678.0]),
+    ("currency prefixes", ["$1,000", "£2,000", "€3,000"], [1000.0, 2000.0, 3000.0]),
+    ("accounting negatives", ["(1,234.50)", "987.25"], [-1234.5, 987.25]),
+    ("percent signs", ["12.5%", "0.5%"], [12.5, 0.5]),
+    ("nil markers", ["-", "n/a", "1,000", "2,000", "nil"], [None, None, 1000.0, 2000.0, None]),
+    ("section headings mixed in", ["100", "200", "Balance sheet date", "300", "400"],
+     [100.0, 200.0, None, 300.0, 400.0]),
+    # 88% numeric: the HBAP (consol) shape that used to stay text.
+    ("mostly numeric with a date row",
+     ["10", "20", "30", "40", "50", "60", "70", "2025-09-30 00:00:00"],
+     [10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, None]),
+    ("free text is refused", ["CANADA", "germany", "FRANCE"], None),
+    ("product names are refused", ["Carretera", "Montana", "Paseo"], None),
+    ("mixed prose is refused",
+     ["Net interest income rose", "Fees fell", "Costs were flat"], None),
+]
+
+for label, values, want in COERCE_CASES:
+    out = m._coerce_numeric_text(pd.Series(values, dtype="object"))
+    if want is None:
+        got = None if out.dtype == object else list(out)
+        print("  %-28s refused (dtype=%s)" % (label, out.dtype))
+        assert out.dtype == object, (label, list(out))
+    else:
+        got = list(out)
+        shown = ["null" if pd.isna(v) else v for v in got]
+        print("  %-28s -> %s" % (label, shown))
+        assert len(got) == len(want), (label, got, want)
+        for g, w in zip(got, want):
+            if w is None:
+                assert pd.isna(g), (label, got, want)
+            else:
+                assert float(g) == float(w), (label, got, want)
 
 # --- 8. restructuring options ------------------------------------------------
 print("\nrestructuring options:")

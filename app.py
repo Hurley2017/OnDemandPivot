@@ -18,8 +18,6 @@ import sys
 import tempfile
 import threading
 import time
-import urllib.error
-import urllib.request
 import webbrowser
 
 import numpy as np
@@ -470,34 +468,62 @@ def _numeric_columns(df: pd.DataFrame) -> list:
     ]
 
 
+# Tokens that mean "nothing" in a financial table. They are set aside before a
+# column is tested, so a mostly-numeric column with a few nil markers still
+# converts instead of staying text.
+_NUMERIC_PLACEHOLDERS = {
+    "", "-", "--", "---", "\u2013", "\u2014", "\u2212",
+    "n/a", "na", "nil", "none", "nan",
+}
+
+# How much of a column must parse before it is treated as numeric. Real
+# financial statements interleave section headings ("Balance sheet date") with
+# the figures, so a strict cut-off leaves obviously numeric columns as text.
+# Anything that does not parse becomes a null rather than being mangled.
+_NUMERIC_COERCE_THRESHOLD = 0.8
+
+
 def _coerce_numeric_text(series: pd.Series) -> pd.Series:
     """
     Turn text-encoded numbers into real numbers.
 
     Handles currency symbols, thousands separators, surrounding spaces,
-    accounting negatives ("(1,234.50)") and trailing percent signs. The column
-    is only converted when at least 90% of its values parse, so free text is
-    never mangled.
+    accounting negatives ("(1,234.50)"), percent signs and the nil markers
+    financial tables use ("-", "n/a", "nil"). A column is only converted when
+    at least `_NUMERIC_COERCE_THRESHOLD` of its non-placeholder values parse,
+    so free text is never mangled; everything else becomes null.
     """
     if not _is_text_series(series):
         return series
-    non_null = series.dropna().astype(str).str.strip()
-    if not len(non_null):
+
+    text = series.astype(str).str.strip()
+    is_placeholder = text.str.lower().isin(_NUMERIC_PLACEHOLDERS)
+    candidates = text[~is_placeholder & series.notna()]
+    if not len(candidates):
         return series
 
-    looks_numeric = non_null.str.match(r"^\$?\s*-?\(?[\d,.\s]+\)?%?$", na=False)
-    if float(looks_numeric.mean()) < 0.9:
+    looks_numeric = candidates.str.match(
+        r"^\s*[$£€¥]?\s*-?\(?[\d,.\s]+\)?\s*%?$", na=False
+    )
+    if float(looks_numeric.mean()) < _NUMERIC_COERCE_THRESHOLD:
         return series
 
     cleaned = (
-        series.astype(str)
-        .str.strip()
-        .str.replace(r"[$£€¥\s]", "", regex=True)
+        text.str.replace(r"[$£€¥\s]", "", regex=True)
+        # Thousands separators: a comma sitting between digits and followed by
+        # exactly three more. `pd.to_numeric` cannot parse "1,234", so leaving
+        # them in made every comma-formatted column silently stay text. A comma
+        # followed by fewer digits is left alone, so a decimal comma survives.
+        .str.replace(r"(?<=\d),(?=\d{3}(?:\D|$))", "", regex=True)
         .str.replace(r"^\((.*)\)$", r"-\1", regex=True)
-        .str.replace(r"%$", "", regex=True)
+        .str.replace(r"%", "", regex=True)
     )
     converted = pd.to_numeric(cleaned, errors="coerce")
-    if float(converted.notna().sum()) < len(non_null) * 0.9:
+    # A nil marker is a missing value, not the text "-".
+    converted[is_placeholder] = np.nan
+
+    parsed = converted[~is_placeholder & series.notna()].notna().sum()
+    if float(parsed) < len(candidates) * _NUMERIC_COERCE_THRESHOLD:
         return series
     return converted
 
@@ -1577,138 +1603,6 @@ def api_kpis():
     if profile is None:
         return _err("No dataset loaded. Upload a file first.", 404)
     return jsonify({"success": True, "profile": profile})
-
-
-DEFAULT_MODEL = "gpt-4o-mini"
-LLM_TIMEOUT_SECONDS = 60
-
-
-def _normalise_chat_endpoint(endpoint: str) -> str:
-    """
-    Accept either a base URL (https://api.openai.com/v1) or a full
-    /chat/completions URL and always return the full URL.
-    """
-    url = endpoint.strip().rstrip("/")
-    if not url:
-        return ""
-    if not re.match(r"^https?://", url, re.IGNORECASE):
-        url = "https://" + url
-    if not url.endswith("/chat/completions"):
-        url = url + "/chat/completions"
-    return url
-
-
-def _call_openai_compatible(
-    endpoint: str, api_key: str, model: str, query: str
-) -> str:
-    """
-    Proxy a chat completion to a user-supplied OpenAI-compatible endpoint.
-
-    This runs server-side so the browser never has to surface CORS
-    restrictions, and so the key only ever travels over loopback.
-    """
-    body = json.dumps(
-        {
-            "model": model or DEFAULT_MODEL,
-            "messages": [
-                {
-                    "role": "system",
-                    "content": (
-                        "You are the AI Data Assistant inside a local data "
-                        "analysis dashboard. Answer concisely. If you do not "
-                        "have the underlying data, say so rather than "
-                        "inventing figures."
-                    ),
-                },
-                {"role": "user", "content": query},
-            ],
-            "temperature": 0.2,
-        }
-    ).encode("utf-8")
-
-    req = urllib.request.Request(
-        _normalise_chat_endpoint(endpoint),
-        data=body,
-        method="POST",
-        headers={
-            "Content-Type": "application/json",
-            # Also covers endpoints that ignore the header entirely.
-            "Authorization": f"Bearer {api_key}",
-            "x-api-key": api_key,
-        },
-    )
-
-    try:
-        with urllib.request.urlopen(req, timeout=LLM_TIMEOUT_SECONDS) as resp:
-            payload = json.loads(resp.read().decode("utf-8", "replace"))
-    except urllib.error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", "replace")[:400]
-        raise RuntimeError(
-            f"Endpoint returned HTTP {exc.code}: {detail or exc.reason}"
-        ) from exc
-    except urllib.error.URLError as exc:
-        raise RuntimeError(f"Could not reach endpoint: {exc.reason}") from exc
-    except TimeoutError as exc:
-        raise RuntimeError(
-            f"Endpoint did not respond within {LLM_TIMEOUT_SECONDS}s."
-        ) from exc
-
-    # OpenAI shape: choices[0].message.content
-    try:
-        content = payload["choices"][0]["message"]["content"]
-    except (KeyError, IndexError, TypeError):
-        # Anthropic shape: content[0].text
-        blocks = payload.get("content")
-        if isinstance(blocks, list) and blocks:
-            content = blocks[0].get("text")
-        else:
-            raise RuntimeError(
-                "Endpoint response had no recognizable message content."
-            ) from None
-
-    if not isinstance(content, str) or not content.strip():
-        raise RuntimeError("Endpoint returned an empty message.")
-    return content.strip()
-
-
-@app.route("/api/chat", methods=["POST"])
-def api_chat():
-    """
-    AI Data Assistant.
-
-    With endpoint + API key supplied, proxies to the user's own
-    OpenAI-compatible model. Without them, returns the placeholder reply so
-    the feature stays usable offline.
-    """
-    payload = request.get_json(silent=True) or {}
-    query = (payload.get("query") or "").strip()
-    if not query:
-        return _err("Empty query.")
-
-    endpoint = (payload.get("endpoint") or "").strip()
-    api_key = (payload.get("api_key") or "").strip()
-    model = (payload.get("model") or "").strip()
-
-    if not endpoint or not api_key:
-        return jsonify(
-            {
-                "success": True,
-                "placeholder": True,
-                "reply": (
-                    "No model is connected. Open “Connect your own model”, "
-                    "add an endpoint and API key, then ask again."
-                ),
-            }
-        )
-
-    try:
-        reply = _call_openai_compatible(endpoint, api_key, model, query)
-    except RuntimeError as exc:
-        return _err(str(exc), status=502)
-    except Exception as exc:  # noqa: BLE001 - surface anything else verbatim
-        return _err(f"Chat request failed: {exc}", status=502)
-
-    return jsonify({"success": True, "reply": reply})
 
 
 @app.errorhandler(413)

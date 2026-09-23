@@ -2210,6 +2210,19 @@ perspective-viewer {
 }
 
 /*
+ * The viewer is a rendering surface only.
+ *
+ * Everything the user touches is our own UI, so Perspective's chrome is hidden:
+ * the tab strip (title, row counts, plugin selector, settings gear) and the
+ * floating status toolbar. Both are light-DOM children of the viewer, so a
+ * plain selector reaches them without needing ::part().
+ */
+perspective-viewer > perspective-viewer-tab,
+perspective-viewer > perspective-viewer-datagrid-toolbar {
+    display: none !important;
+}
+
+/*
  * HSBC branding inside Perspective.
  *
  * v5 names every variable `--psp-{module}--{component?}--{property}` and ships
@@ -2626,6 +2639,397 @@ perspective-viewer [theme] {
 /* ==========================================================================
    Responsive
    ========================================================================== */
+
+/* ------------------------------------------------------- fields panel */
+
+/* The pivot builder. Perspective's own panel is hidden, so this is the only
+   place shelves, aggregates, filters and sorts can be edited. */
+
+.fields-dock {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    background: var(--white);
+    border: 1px solid var(--grey-200);
+    border-top: 3px solid var(--red);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+}
+
+.fields-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 11px 14px;
+    border-bottom: 1px solid var(--grey-200);
+}
+
+.fields-head h2 {
+    margin: 0;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: var(--black);
+}
+
+.fields-close {
+    margin-left: auto;
+    border: none;
+    background: transparent;
+    color: var(--grey-400);
+    font-size: 19px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 2px;
+}
+
+.fields-close:hover {
+    color: var(--black);
+}
+
+.fields-search {
+    margin: 12px 14px 0;
+    padding: 7px 10px;
+    font-family: var(--font);
+    font-size: 12.5px;
+    color: var(--ink);
+    background: var(--grey-050);
+    border: 1px solid var(--grey-300);
+    border-radius: var(--radius);
+}
+
+.fields-search:focus {
+    outline: none;
+    border-color: var(--red);
+    box-shadow: 0 0 0 3px rgba(219, 0, 17, 0.14);
+}
+
+.fields-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 12px 14px 16px;
+}
+
+.fields-section + .fields-section {
+    margin-top: 18px;
+    padding-top: 16px;
+    border-top: 1px solid var(--grey-200);
+}
+
+.fields-section-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--grey-600);
+}
+
+.fields-section-head .tag {
+    margin-left: 0;
+}
+
+.fields-hint {
+    margin: 10px 0 0;
+    font-size: 11.5px;
+    line-height: 1.45;
+    color: var(--grey-500);
+}
+
+.mini-btn {
+    margin-left: auto;
+    padding: 3px 9px;
+    font-family: var(--font);
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--grey-600);
+    background: var(--white);
+    border: 1px solid var(--grey-300);
+    border-radius: 12px;
+    cursor: pointer;
+}
+
+.mini-btn:hover {
+    color: var(--white);
+    background: var(--red);
+    border-color: var(--red);
+}
+
+/* ---- available columns ---- */
+
+.field-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+}
+
+.field-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 9px;
+    font-size: 11.5px;
+    color: var(--ink);
+    background: var(--grey-050);
+    border: 1px solid var(--grey-300);
+    border-radius: 12px;
+    cursor: grab;
+    user-select: none;
+}
+
+.field-chip:hover {
+    border-color: var(--black);
+    background: var(--white);
+}
+
+.field-chip.is-used {
+    opacity: 0.45;
+}
+
+.field-chip .kind {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--grey-400);
+}
+
+.field-chip .kind.number {
+    color: var(--blue);
+}
+
+.field-chip .kind.datetime {
+    color: var(--green);
+}
+
+.field-chip.dragging {
+    opacity: 0.4;
+}
+
+/* ---- shelves ---- */
+
+.shelf + .shelf {
+    margin-top: 12px;
+}
+
+.shelf-head {
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--grey-600);
+    margin-bottom: 5px;
+}
+
+.shelf-drop {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    min-height: 42px;
+    padding: 7px;
+    background: var(--grey-050);
+    border: 1px dashed var(--grey-300);
+    border-radius: var(--radius);
+    transition: border-color 0.14s ease, background 0.14s ease;
+}
+
+.shelf-drop.is-over {
+    background: var(--red-tint);
+    border-color: var(--red);
+    border-style: solid;
+}
+
+.shelf-empty {
+    font-size: 11.5px;
+    font-style: italic;
+    color: var(--grey-400);
+    padding: 3px 2px;
+}
+
+.shelf-chip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 7px 5px 10px;
+    font-size: 12px;
+    color: var(--ink);
+    background: var(--white);
+    border: 1px solid var(--grey-300);
+    border-left: 3px solid var(--red);
+    border-radius: var(--radius);
+    cursor: grab;
+}
+
+.shelf-chip.is-dragging {
+    opacity: 0.4;
+}
+
+.shelf-chip .name {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.shelf-chip select {
+    flex: 0 0 auto;
+    max-width: 92px;
+    padding: 2px 4px;
+    font-family: var(--font);
+    font-size: 11px;
+    color: var(--grey-600);
+    background: var(--grey-050);
+    border: 1px solid var(--grey-200);
+    border-radius: 3px;
+}
+
+.shelf-chip .drop {
+    flex: 0 0 auto;
+    border: none;
+    background: transparent;
+    color: var(--grey-400);
+    font-size: 15px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 2px;
+}
+
+.shelf-chip .drop:hover {
+    color: var(--red);
+}
+
+/* ---- filters and sorts ---- */
+
+.rule-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.rule-empty {
+    font-size: 11.5px;
+    font-style: italic;
+    color: var(--grey-400);
+}
+
+.rule-row {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 6px;
+    background: var(--grey-050);
+    border: 1px solid var(--grey-200);
+    border-radius: var(--radius);
+}
+
+.rule-row select,
+.rule-row input {
+    min-width: 0;
+    padding: 3px 5px;
+    font-family: var(--font);
+    font-size: 11.5px;
+    color: var(--ink);
+    background: var(--white);
+    border: 1px solid var(--grey-300);
+    border-radius: 3px;
+}
+
+.rule-row select {
+    flex: 0 1 auto;
+}
+
+.rule-row input {
+    flex: 1 1 40px;
+}
+
+.rule-row .drop {
+    flex: 0 0 auto;
+    border: none;
+    background: transparent;
+    color: var(--grey-400);
+    font-size: 15px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 2px;
+}
+
+.rule-row .drop:hover {
+    color: var(--red);
+}
+
+/* ---- command-bar summary pills ---- */
+
+.shelf-pill {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1px;
+    min-width: 0;
+    max-width: 210px;
+    padding: 6px 12px;
+    font-family: var(--font);
+    text-align: left;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: background 0.14s ease, border-color 0.14s ease;
+}
+
+.shelf-pill:hover {
+    background: var(--grey-050);
+    border-color: var(--grey-200);
+}
+
+.shelf-pill-label {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: var(--grey-600);
+}
+
+.shelf-pill-value {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink);
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.shelf-pill.is-set .shelf-pill-value {
+    color: var(--red);
+}
+
+/* The fields panel takes its own column, and shrinks on narrow screens. */
+.dash-layout.fields-open {
+    grid-template-columns: 300px minmax(0, 1fr);
+}
+
+.dash-layout.fields-open.chat-open {
+    grid-template-columns: 300px minmax(0, 1fr) 380px;
+}
+
+@media (max-width: 1180px) {
+    .dash-layout.fields-open {
+        grid-template-columns: 250px minmax(0, 1fr);
+    }
+
+    .dash-layout.fields-open.chat-open {
+        grid-template-columns: 250px minmax(0, 1fr) 340px;
+    }
+}
 
 @media (max-width: 1180px) {
     /* The option panel can use the whole width once the page is narrow. */

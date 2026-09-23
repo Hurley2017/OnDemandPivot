@@ -84,7 +84,7 @@ export. The migration is concentrated, not spread across the app.
 ### What the upgrade actually took — done, 24 Sep 2026
 
 The app now runs **`@perspective-dev` 5.5.1**, vendored under
-`static/vendor/perspective/` (4 JS bundles, 2 WASMs, 2 CSS files, 4.7 MB). The
+`static/vendor/perspective/` (4 JS bundles, 2 WASMs, 2 CSS files, 4.5 MB). The
 migration landed close to the estimate above. Notes worth keeping:
 
 1. **The server WASM lives in its own npm package.** The core bundle guesses its
@@ -100,47 +100,73 @@ migration landed close to the estimate above. Notes worth keeping:
    *stale* `state.config` look authoritative. Accepting both shapes fixed the
    "changing colours changes my grouping" bug at the source.
 
-3. **The `[theme="…"]` trap is gone.** In v3, `pro.css` defined the chart
-   variables only under a `[theme="Pro Light"]` selector the viewer never kept,
-   so every d3fc chart crashed. v5 defines `--psp-charts--series-N--color` on the
-   element itself with real defaults, so the palette is now a plain theme
-   override. The whole crash-recovery workaround is retired.
+3. **The `[theme="…"]` trap moved.** In v3, `pro.css` defined the chart
+   variables only under a selector the viewer never kept, so every d3fc chart
+   crashed. In v5 the defaults are set on
+   `perspective-viewer, perspective-viewer[theme=…], perspective-viewer [theme=…]`
+   — and v5 copies the active theme name onto the **plugin** element, so that
+   third selector matches the chart itself and beats inheritance. Setting the
+   palette on the viewer alone does nothing; it is written to a dedicated sheet
+   matching the same three shapes, with all twelve series filled (the engine
+   stops reading at the first empty one).
 
 4. **Charts are canvas, not SVG.** `viewer-d3fc` is replaced by
    `perspective-viewer-charts-<type>` elements that render to GPU canvases in a
-   shadow root. The PNG exporter was rewritten to composite laid-out canvases
-   instead of serialising and style-inlining SVGs — shorter, and it no longer
-   needs `inlineSvgStyles`/`loadImage`.
+   shadow root. The PNG exporter composites laid-out canvases instead of
+   serialising and style-inlining SVGs.
 
 5. **`viewer.export()` returns CSV** of the current view, regardless of a
-   `format` option. Used for the oversized-view CSV path so a 70 MB Arrow buffer
-   no longer round-trips to Flask just to be re-encoded. `viewer.download()`
-   exists but is not needed.
+   `format` option. Used for the oversized-view CSV path so a large Arrow buffer
+   no longer round-trips to Flask just to be re-encoded.
 
-6. **The datagrid header has no custom property.** Header cells sit in the
-   plugin's shadow root with a transparent background, so HSBC red headers are
-   restored by injecting a marked `<style>` into that shadow root — once, keyed
-   with `data-hsbc-headers`.
-
-7. **Maps need the network.** `viewer-charts` references
+6. **Maps need the network.** `viewer-charts` references
    `tile.openstreetmap.org` and `tiles.versatiles.org` for basemaps. The 13
    toolbar views are all offline-safe; Map and Density are deliberately **not**
    exposed, since a blank basemap on an air-gapped machine is worse than no
-   option. `--psp-charts--map-tiles--url` exists if that ever changes.
+   option.
 
-8. **v5 ships its own AI assistant** with OpenAI / Anthropic / Gemini / Ollama /
-   LM Studio / OpenRouter providers, driven by the same endpoint-and-key model as
-   our docked panel. Worth revisiting if the custom panel ever feels redundant —
-   but ours is wired to the user's own endpoint today.
+### Option C — our UI, their engine
 
-9. **`group_rollup_mode` / `split_rollup_mode`** replace `leaves_only`, and
-   `restore()` accepts the whole config including `table`, so table selection and
-   layout apply in one atomic render.
+The viewer's own chrome is hidden (`perspective-viewer-tab`, the status toolbar)
+and every control the user touches is ours. `<perspective-viewer>` stays mounted
+as a rendering surface, because that is what keeps all thirteen chart types, the
+virtualised grid and — importantly — v5's assistant, which lives in the viewer
+bundle and cannot be used without it.
+
+Our side of the bargain:
+
+| Piece | Where |
+|---|---|
+| Field list, Group by / Split by / Values shelves, aggregates | `initFields()` in `dashboard.js` |
+| Filters and sorts | `buildFilterRow()` / `buildSortRow()` |
+| Command-bar summary pills | `renderPills()` |
+| Grid theme matching the import page's preview table | `GRID_THEME_CSS`, injected into the plugin's shadow root |
+| Chart palette | `paintViewer()` |
+
+The Values shelf only ever holds a *deliberate* selection. A flat grid reports
+every remaining column, so `syncToolbarFromConfig()` detects that default and
+leaves the shelf empty rather than filling it with columns nobody chose.
+
+### The assistant is now v5's agent, not our proxy
+
+`/api/chat` and its Flask proxy are **deleted**. The docked panel drives
+`viewer.agentConfig({ url, apiKey, model })` then `await viewer.agentPrompt(q)`.
+
+That is a different class of feature. The v5 agent is a tool-calling agent with
+eleven tools — `get_schema`, `get_view_config`, `set_view_config`,
+`list_plugins`, `validate_expression`, `get_style_schema`, `list_panels`,
+`add_panel`, `remove_panel`, `activate_panel`, `search_docs` — so it can read the
+dataset, pick a plugin and *reconfigure the view itself*, not just talk about it.
+`search_docs` is answered from a bundled index, so the whole assistant is offline
+apart from the endpoint the user names.
+
+Credentials now go straight from the browser to that endpoint rather than via
+Flask, so the endpoint must send CORS headers. llama.cpp's server does.
 
 **Verified after the upgrade:** all 13 views render `Ready`; a hand-built pivot
 survives every palette change and view switch; xlsx and PNG exports both produce
 valid files; **zero off-machine requests** in the network audit; no console
-errors.
+errors; and the assistant answers correctly against a local llama.cpp model.
 
 ---
 

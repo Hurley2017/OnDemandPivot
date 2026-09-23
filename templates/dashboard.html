@@ -48,20 +48,20 @@
         <select id="viewSelect"></select>
     </div>
 
-    <div class="cmd-group">
-        <label for="groupBy">Group by</label>
-        <select id="groupBy"><option value="">— none —</option></select>
-    </div>
+    <button class="shelf-pill" id="pillGroup" type="button" data-shelf="group">
+        <span class="shelf-pill-label">Group by</span>
+        <span class="shelf-pill-value" id="pillGroupValue">— none —</span>
+    </button>
 
-    <div class="cmd-group">
-        <label for="splitBy">Split by</label>
-        <select id="splitBy"><option value="">— none —</option></select>
-    </div>
+    <button class="shelf-pill" id="pillSplit" type="button" data-shelf="split">
+        <span class="shelf-pill-label">Split by</span>
+        <span class="shelf-pill-value" id="pillSplitValue">— none —</span>
+    </button>
 
-    <div class="cmd-group">
-        <label for="measure">Values</label>
-        <select id="measure"><option value="">— all —</option></select>
-    </div>
+    <button class="shelf-pill" id="pillValues" type="button" data-shelf="values">
+        <span class="shelf-pill-label">Values</span>
+        <span class="shelf-pill-value" id="pillValuesValue">— all —</span>
+    </button>
 
     <div class="cmd-actions">
         <div class="palette-wrap">
@@ -94,9 +94,10 @@
                 </p>
             </div>
         </div>
-        <button class="btn btn-ghost btn-sm" id="settingsBtn" type="button"
-                title="Show or hide Perspective's own drag-and-drop field panel">
-            Pivot panel
+        <button class="btn btn-ghost btn-sm" id="fieldsBtn" type="button"
+                aria-controls="fieldsDock" aria-expanded="false"
+                title="Show or hide the field list and shelves">
+            Fields
         </button>
         <button class="btn btn-ghost btn-sm" id="resetBtn" type="button">
             Reset
@@ -108,6 +109,75 @@
 </div>
 
 <main class="dash-layout" id="dashLayout">
+
+    <!-- ============================ FIELDS PANEL ========================== -->
+    <!-- The pivot builder. Perspective's own panel is hidden, so every shelf,
+         chip, aggregate, filter and sort the viewer supports is driven from
+         here. -->
+    <aside class="fields-dock" id="fieldsDock" hidden
+           aria-label="Fields and shelves">
+        <div class="fields-head">
+            <h2>Fields</h2>
+            <button class="fields-close" id="fieldsClose" type="button"
+                    aria-label="Close the fields panel">&times;</button>
+        </div>
+
+        <input class="fields-search" id="fieldSearch" type="search"
+               placeholder="Search columns" autocomplete="off">
+
+        <div class="fields-scroll">
+            <div class="fields-section">
+                <div class="fields-section-head">
+                    Available columns
+                    <span class="tag" id="fieldsCount">—</span>
+                </div>
+                <div class="field-list" id="fieldList"></div>
+                <p class="fields-hint">
+                    Drag a column onto a shelf, or double-click to send it to the
+                    first shelf that accepts it.
+                </p>
+            </div>
+
+            <div class="fields-section">
+                <div class="shelf">
+                    <div class="shelf-head">Group by</div>
+                    <div class="shelf-drop" id="shelfGroup" data-shelf="group">
+                        <span class="shelf-empty">Drop columns here to group rows</span>
+                    </div>
+                </div>
+
+                <div class="shelf">
+                    <div class="shelf-head">Split by</div>
+                    <div class="shelf-drop" id="shelfSplit" data-shelf="split">
+                        <span class="shelf-empty">Drop columns here to split series</span>
+                    </div>
+                </div>
+
+                <div class="shelf">
+                    <div class="shelf-head">Values</div>
+                    <div class="shelf-drop" id="shelfValues" data-shelf="values">
+                        <span class="shelf-empty">Drop measures here to aggregate</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="fields-section">
+                <div class="fields-section-head">
+                    Filters
+                    <button class="mini-btn" id="addFilter" type="button">Add</button>
+                </div>
+                <div class="rule-list" id="filterList"></div>
+            </div>
+
+            <div class="fields-section">
+                <div class="fields-section-head">
+                    Sort
+                    <button class="mini-btn" id="addSort" type="button">Add</button>
+                </div>
+                <div class="rule-list" id="sortList"></div>
+            </div>
+        </div>
+    </aside>
 
     <!-- ============================ VIEWER ============================= -->
     <div class="dash-main">
@@ -167,8 +237,8 @@
 
         <div class="viewer-shell">
             <div class="viewer-caption">
-                <span>Drag fields between the shelves in the
-                    <b>Pivot panel</b> — or use the selects above</span>
+                <span>Drag columns from the <b>Fields</b> panel onto a shelf —
+                    or use the pills above</span>
             </div>
             <!-- Perspective 5.5.1 draws charts to GPU canvases inside the plugin
                  element. The HSBC chart palette is set on this element in
@@ -218,8 +288,8 @@
                         <input id="chatKey" type="password" autocomplete="off"
                                spellcheck="false">
                         <div class="help">
-                            Kept in this browser only, and sent over loopback to this
-                            app when you press Send.
+                            Kept in this browser only, and sent straight to the
+                            endpoint above — never to this app.
                         </div>
                     </div>
 
@@ -227,6 +297,10 @@
                         <label for="chatModel">Model <span class="tag">optional</span></label>
                         <input id="chatModel" type="text" autocomplete="off"
                                spellcheck="false">
+                        <div class="help">
+                            A model that supports tool calling gets the most out of
+                            the assistant.
+                        </div>
                     </div>
 
                     <div class="chat-config-actions">
