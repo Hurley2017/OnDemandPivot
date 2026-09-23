@@ -103,6 +103,7 @@
                 el.value = el.defaultValue;
             }
         });
+        window.CPA.refreshSelects();
     }
 
     /** Populate the worksheet picker; hide it entirely for CSV uploads. */
@@ -124,6 +125,7 @@
             .map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`)
             .join("");
         if (chosen && list.includes(chosen)) select.value = chosen;
+        window.CPA.refreshSelects();
     }
 
     async function postJSON(url, payload) {
@@ -230,6 +232,7 @@
                 .map((n) => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`)
                 .join("");
         if (names.includes(current)) sortBy.value = current;
+        window.CPA.refreshSelects();
     }
 
     function renderPreview(preview) {
@@ -434,6 +437,7 @@
     });
 
     window.CPA.initCollapsibles();
+    window.CPA.enhanceSelects();
 
     // Re-profile on any control change. Both `input` and `change` are wired so
     // typing, spinners, paste and programmatic edits all refresh the preview.

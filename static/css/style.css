@@ -289,14 +289,20 @@ code {
     gap: 7px;
 }
 
-.btn-ai .spark {
+.btn-ai .robot {
+    width: 17px;
+    height: 17px;
+    flex: 0 0 auto;
     color: var(--red);
-    font-size: 13px;
     transition: transform 0.25s ease;
 }
 
-.btn-ai:hover .spark {
-    transform: rotate(90deg) scale(1.15);
+.btn-ai:hover .robot {
+    transform: translateY(-1.5px) scale(1.08);
+}
+
+.btn-ai.is-live .robot {
+    color: var(--green);
 }
 
 .btn-ai .ai-state {
@@ -482,8 +488,20 @@ code {
 }
 
 .foot-note {
-    font-size: 13px;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 12.5px;
     color: var(--grey-600);
+}
+
+.foot-note::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--red);
+    flex: 0 0 auto;
 }
 
 /* ==========================================================================
@@ -762,21 +780,184 @@ table.data td.null {
     box-shadow: 0 0 0 3px rgba(219, 0, 17, 0.14);
 }
 
-/* Custom dropdown chrome shared by every select in the app. */
-.field select,
-.cmd-group select {
-    appearance: none;
-    -webkit-appearance: none;
-    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23666' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 11px center;
-    padding-right: 30px;
-    cursor: pointer;
+/* ==========================================================================
+   Custom dropdowns
+
+   The native <select> stays in the DOM (hidden) so value handling and change
+   events are untouched; `.cselect` renders the visible control.
+   ========================================================================== */
+
+.cselect {
+    position: relative;
+    width: 100%;
 }
 
-.field select:hover,
-.cmd-group select:hover {
-    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23db0011' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+.cselect-native {
+    position: absolute !important;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+    margin: 0;
+    padding: 0;
+    border: 0;
+}
+
+.cselect-button {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    font-family: var(--font);
+    font-size: 13.5px;
+    font-weight: 700;
+    color: var(--black);
+    background: var(--white);
+    border: 1px solid var(--grey-300);
+    border-radius: var(--radius);
+    padding: 9px 12px;
+    cursor: pointer;
+    text-align: left;
+    transition: border-color 0.16s ease, box-shadow 0.16s ease,
+        background 0.16s ease;
+}
+
+.cselect-button:hover {
+    border-color: var(--grey-400);
+    background: var(--grey-050);
+}
+
+.cselect-button:focus-visible {
+    outline: none;
+    border-color: var(--red);
+    box-shadow: 0 0 0 3px rgba(219, 0, 17, 0.16);
+}
+
+.cselect-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 400;
+    font-size: 13.5px;
+}
+
+.cselect-arrow {
+    flex: 0 0 auto;
+    width: 8px;
+    height: 8px;
+    border-right: 2px solid var(--grey-600);
+    border-bottom: 2px solid var(--grey-600);
+    transform: rotate(45deg) translate(-2px, -2px);
+    transition: transform 0.22s cubic-bezier(0.34, 1.4, 0.64, 1),
+        border-color 0.16s ease;
+}
+
+.cselect.is-open .cselect-arrow {
+    transform: rotate(-135deg) translate(-3px, -3px);
+    border-color: var(--red);
+}
+
+.cselect.is-open .cselect-button {
+    border-color: var(--red);
+    box-shadow: 0 0 0 3px rgba(219, 0, 17, 0.16);
+}
+
+.cselect-panel {
+    position: absolute;
+    z-index: 80;
+    top: calc(100% + 6px);
+    left: 0;
+    min-width: 100%;
+    max-width: min(340px, 90vw);
+    max-height: 288px;
+    overflow-y: auto;
+    background: var(--white);
+    border: 1px solid var(--grey-200);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-md);
+    padding: 6px;
+    animation: cselect-in 0.16s ease-out;
+}
+
+@keyframes cselect-in {
+    from {
+        opacity: 0;
+        transform: translateY(-6px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.cselect-group {
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    color: var(--grey-400);
+    padding: 9px 10px 4px;
+}
+
+.cselect-option {
+    display: block;
+    width: 100%;
+    text-align: left;
+    font-family: var(--font);
+    font-size: 13px;
+    color: var(--ink);
+    background: transparent;
+    border: none;
+    border-radius: var(--radius);
+    padding: 8px 10px;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: background 0.12s ease, color 0.12s ease;
+}
+
+.cselect-option:hover {
+    background: var(--grey-100);
+    color: var(--black);
+}
+
+.cselect-option.is-selected {
+    background: var(--red-tint);
+    color: var(--red-dark);
+    font-weight: 700;
+}
+
+.cselect-option.is-selected::after {
+    content: "✓";
+    float: right;
+    color: var(--red);
+}
+
+/* Inside the command bar the control keeps its compact metrics. */
+.cmd-group .cselect {
+    width: auto;
+    min-width: 168px;
+}
+
+.cmd-group .cselect-button {
+    padding: 8px 12px;
+    font-size: 13px;
+}
+
+.cmd-view .cselect-button {
+    border-color: var(--black);
+    border-width: 2px;
+    background: var(--grey-050);
+}
+
+.cmd-view .cselect-button:hover {
+    background: var(--white);
+}
+
+.cmd-view .cselect {
+    min-width: 190px;
 }
 
 .field .help {
@@ -989,8 +1170,15 @@ table.data td.null {
 }
 
 .preview-count {
-    font-size: 11.5px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
     color: var(--grey-600);
+    background: var(--white);
+    border: 1px solid var(--grey-200);
+    border-radius: 10px;
+    padding: 3px 9px;
 }
 
 .preview-state {
@@ -1290,6 +1478,131 @@ body.page-dashboard .site-header {
     gap: 8px;
 }
 
+/* ------------------------------------------------------- palette picker */
+
+.palette-wrap {
+    position: relative;
+}
+
+.palette-dots {
+    display: inline-flex;
+    gap: 2px;
+}
+
+.palette-dots i {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: block;
+}
+
+.palette-panel {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 8px);
+    z-index: 90;
+    width: 268px;
+    background: var(--white);
+    border: 1px solid var(--grey-200);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-md);
+    padding: 12px;
+    animation: cselect-in 0.16s ease-out;
+}
+
+.palette-head {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    color: var(--grey-600);
+    margin-bottom: 9px;
+}
+
+.palette-presets {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.palette-preset {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius);
+    padding: 6px 7px;
+    cursor: pointer;
+    font-family: var(--font);
+    font-size: 12px;
+    color: var(--ink);
+    text-align: left;
+    transition: background 0.13s ease, border-color 0.13s ease;
+}
+
+.palette-preset:hover {
+    background: var(--grey-050);
+    border-color: var(--grey-200);
+}
+
+.palette-preset.is-active {
+    border-color: var(--red);
+    background: var(--red-tint);
+    font-weight: 700;
+}
+
+.palette-swatches {
+    display: inline-flex;
+    gap: 2px;
+    flex: 0 0 auto;
+}
+
+.palette-swatches i {
+    width: 11px;
+    height: 11px;
+    border-radius: 2px;
+    display: block;
+}
+
+.palette-custom {
+    display: flex;
+    gap: 10px;
+    margin-top: 12px;
+    padding-top: 11px;
+    border-top: 1px solid var(--grey-200);
+}
+
+.palette-custom label {
+    flex: 1;
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--grey-600);
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.palette-custom input[type="color"] {
+    width: 100%;
+    height: 30px;
+    padding: 2px;
+    border: 1px solid var(--grey-300);
+    border-radius: var(--radius);
+    background: var(--white);
+    cursor: pointer;
+}
+
+.palette-note {
+    margin: 10px 0 0;
+    font-size: 11px;
+    line-height: 1.45;
+    color: var(--grey-400);
+}
+
 /* --------------------------------------------------------------- layout */
 
 .dash-layout {
@@ -1347,12 +1660,52 @@ body.page-dashboard .site-header {
     color: var(--black);
 }
 
+/* Status reads as a proper pill, with a dot that tracks the state. */
 #viewerStatus {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.09em;
-    color: var(--black);
+    letter-spacing: 0.1em;
+    color: var(--grey-600);
+    background: var(--white);
+    border: 1px solid var(--grey-200);
+    border-radius: 10px;
+    padding: 3px 10px;
     white-space: nowrap;
+    transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+
+#viewerStatus::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--grey-400);
+    flex: 0 0 auto;
+    transition: background 0.2s ease;
+}
+
+#viewerStatus.is-ready {
+    color: var(--green);
+    border-color: #c8ecd9;
+    background: #f6fdf9;
+}
+
+#viewerStatus.is-ready::before {
+    background: var(--green);
+}
+
+#viewerStatus.is-error {
+    color: var(--red);
+    border-color: #f6c9cc;
+    background: var(--red-tint);
+}
+
+#viewerStatus.is-error::before {
+    background: var(--red);
 }
 
 perspective-viewer {
@@ -1427,8 +1780,19 @@ perspective-viewer {
     padding: 14px 16px;
 }
 
+/* The explorer is a flex column: the list shrinks and scrolls, the detail
+   stays pinned at the bottom so selecting a column never pushes it out of
+   reach. */
+.card-explorer {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    flex: 1 1 auto;
+}
+
 .kpi-list {
-    max-height: 34vh;
+    flex: 1 1 auto;
+    min-height: 96px;
     overflow-y: auto;
     padding: 8px;
     display: flex;
@@ -1495,8 +1859,11 @@ perspective-viewer {
 }
 
 .kpi-detail {
+    flex: 0 0 auto;
+    max-height: 46%;
+    overflow-y: auto;
     padding: 13px 16px;
-    border-top: 1px solid var(--grey-200);
+    border-top: 2px solid var(--red);
     background: var(--grey-050);
     font-size: 12.5px;
 }

@@ -26,6 +26,7 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 from flask import Flask, Response, jsonify, render_template, request
+from openpyxl import Workbook
 from werkzeug.utils import secure_filename
 
 # ---------------------------------------------------------------------------
@@ -53,15 +54,18 @@ ALLOWED_EXTENSIONS = {".csv", ".xlsx", ".xlsb"}
 # Excel formats we can open, and the pandas engine each one needs.
 EXCEL_ENGINES = {".xlsx": "openpyxl", ".xlsb": "pyxlsb"}
 UPLOAD_DIR = os.path.join(tempfile.gettempdir(), "ondemandpivot")
-PREVIEW_ROWS = 100
+PREVIEW_ROWS = 20
 PREVIEW_COLS = 60  # display cap only; the dashboard always gets every column
+# Above this many cells a .xlsx export is swapped for CSV (see /api/export/*).
+EXCEL_CELL_BUDGET = 500_000
 
 app = Flask(
     __name__,
     template_folder=TEMPLATE_DIR,
     static_folder=STATIC_DIR,
 )
-app.config["MAX_CONTENT_LENGTH"] = 100 * 1024 * 1024  # 100 MB upload cap
+# 100 MB uploads, plus headroom for posting a large view back for export.
+app.config["MAX_CONTENT_LENGTH"] = 256 * 1024 * 1024
 app.config["SECRET_KEY"] = "ondemandpivot-local-only"
 # Never let a browser serve a stale stylesheet/script after an update.
 app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
@@ -1409,6 +1413,44 @@ def api_data():
     )
 
 
+def _read_export_frame():
+    """Decode the Arrow view the browser posted, or return (None, error)."""
+    raw = request.get_data()
+    if not raw:
+        return None, _err("Nothing to export.", 400)
+    try:
+        with pa.ipc.open_stream(pa.BufferReader(raw)) as reader:
+            table = reader.read_all()
+    except Exception as exc:  # noqa: BLE001 - surface the parser message
+        return None, _err(f"Could not read the exported view: {exc}", 400)
+    if table.num_rows == 0 or table.num_columns == 0:
+        return None, _err("The current view has no rows to export.", 422)
+    try:
+        return table.to_pandas(), None
+    except Exception as exc:  # noqa: BLE001
+        return None, _err(f"Could not convert the view to a table: {exc}", 500)
+
+
+@app.route("/api/export/csv", methods=["POST"])
+def api_export_csv():
+    """Same view as /api/export/xlsx, written as CSV (fast at any size)."""
+    frame, error = _read_export_frame()
+    if error is not None:
+        return error
+
+    buffer = io.StringIO()
+    frame.to_csv(buffer, index=False)
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    return Response(
+        buffer.getvalue(),
+        mimetype="text/csv",
+        headers={
+            "Content-Disposition": f'attachment; filename="view-{stamp}.csv"',
+            "Cache-Control": "no-store",
+        },
+    )
+
+
 @app.route("/api/export/xlsx", methods=["POST"])
 def api_export_xlsx():
     """
@@ -1418,28 +1460,39 @@ def api_export_xlsx():
     as an Arrow IPC stream, so the workbook matches the grid on screen rather
     than the raw upload.
     """
-    raw = request.get_data()
-    if not raw:
-        return _err("Nothing to export.", 400)
+    frame, error = _read_export_frame()
+    if error is not None:
+        return error
 
-    try:
-        with pa.ipc.open_stream(pa.BufferReader(raw)) as reader:
-            table = reader.read_all()
-    except Exception as exc:  # noqa: BLE001 - surface the parser message
-        return _err(f"Could not read the exported view: {exc}", 400)
+    # Excel's own hard limit; anything larger cannot be represented.
+    if len(frame) > 1048575:
+        return _err(
+            "That view has more than 1,048,575 rows, which Excel cannot hold. "
+            "Filter or group the view, or download it as CSV.",
+            422,
+        )
 
-    if table.num_rows == 0 or table.num_columns == 0:
-        return _err("The current view has no rows to export.", 422)
-
-    try:
-        frame = table.to_pandas()
-    except Exception as exc:  # noqa: BLE001
-        return _err(f"Could not convert the view to a table: {exc}", 500)
+    # openpyxl writes roughly 50k cells a second, so a very large view would
+    # leave the browser waiting minutes. The dashboard switches to CSV above
+    # this size; the guard keeps the endpoint honest if called directly.
+    if len(frame) * max(1, frame.shape[1]) > EXCEL_CELL_BUDGET:
+        return _err(
+            "That view is too large for a fast Excel export. Download it as "
+            "CSV instead, or group/filter the view first.",
+            422,
+        )
 
     buffer = io.BytesIO()
     try:
-        with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-            frame.to_excel(writer, index=False, sheet_name="View")
+        # openpyxl's write-only mode streams rows straight to the file instead
+        # of building a cell object graph - the difference is minutes versus
+        # seconds on a large view.
+        book = Workbook(write_only=True)
+        sheet = book.create_sheet("View")
+        sheet.append([str(c) for c in frame.columns])
+        for row in frame.itertuples(index=False, name=None):
+            sheet.append(list(row))
+        book.save(buffer)
     except Exception as exc:  # noqa: BLE001
         return _err(f"Could not build the workbook: {exc}", 500)
 

@@ -38,6 +38,9 @@ const state = {
     profile: null,
     ready: false,
     table: null,       // the Perspective table, kept for viewer rebuilds
+    palette: null,     // chart colours currently applied
+    chatVerified: null, // null = untested, true = replied, false = failed
+    chatError: "",
 };
 
 /**
@@ -118,7 +121,10 @@ function fail(message) {
 
 function setStatus(text) {
     const el = $("viewerStatus");
-    if (el) el.textContent = text;
+    if (!el) return;
+    el.textContent = text;
+    el.classList.toggle("is-ready", text === "Ready");
+    el.classList.toggle("is-error", /error|unavailable|failed/i.test(text));
 }
 
 /* --------------------------------------------------------------- toolbar */
@@ -169,6 +175,7 @@ async function renderViewSelect() {
 
     select.value = state.plugin;
     select.addEventListener("change", (e) => selectView(e.target.value));
+    window.CPA.refreshSelects();
 }
 
 function markActiveView() {
@@ -176,10 +183,11 @@ function markActiveView() {
     if (select && state.registered.includes(state.plugin)) {
         select.value = state.plugin;
     }
+    window.CPA.refreshSelects();
     const dl = $("downloadBtn");
     if (dl) {
         dl.textContent =
-            state.plugin === "Datagrid" ? "Download Excel" : "Download PNG";
+            state.plugin === "Datagrid" ? "Download table" : "Download PNG";
     }
 }
 
@@ -228,6 +236,85 @@ function buildToolbar() {
     $("downloadBtn").addEventListener("click", downloadCurrentView);
 }
 
+/* ---------------------------------------------------------- palette UI */
+
+function initPalette() {
+    const btn = $("paletteBtn");
+    const panel = $("palettePanel");
+    const presets = $("palettePresets");
+    const primary = $("palettePrimary");
+    const secondary = $("paletteSecondary");
+
+    presets.innerHTML = PALETTES.map(
+        (p, i) => `
+        <button class="palette-preset" type="button" data-index="${i}">
+            <span class="palette-swatches">${p.colors
+                .slice(0, 5)
+                .map((c) => `<i style="background:${c}"></i>`)
+                .join("")}</span>
+            ${escapeHtml(p.name)}
+        </button>`
+    ).join("");
+
+    const mark = () => {
+        const current = JSON.stringify(state.palette);
+        presets.querySelectorAll(".palette-preset").forEach((el) => {
+            el.classList.toggle(
+                "is-active",
+                JSON.stringify(PALETTES[Number(el.dataset.index)].colors) === current
+            );
+        });
+    };
+
+    const apply = async (colors) => {
+        state.palette = colors;
+        savePalette(colors);
+        primary.value = colors[0];
+        secondary.value = colors[1];
+        paintViewer($("viewer"), colors);
+        mark();
+        // d3fc only reads the palette when it first draws a chart, so an open
+        // chart is redrawn by rebuilding the viewer with the same config.
+        if (state.plugin && state.plugin !== "Datagrid") {
+            await rebuildViewer(state.config || undefined);
+            setStatus("Ready");
+        }
+    };
+
+    presets.querySelectorAll(".palette-preset").forEach((el) => {
+        el.addEventListener("click", () =>
+            apply(PALETTES[Number(el.dataset.index)].colors.slice())
+        );
+    });
+
+    const applyCustom = () => {
+        const colors = state.palette.slice();
+        colors[0] = primary.value;
+        colors[1] = secondary.value;
+        apply(colors);
+    };
+    primary.addEventListener("change", applyCustom);
+    secondary.addEventListener("change", applyCustom);
+
+    const close = () => {
+        panel.hidden = true;
+        btn.setAttribute("aria-expanded", "false");
+    };
+
+    btn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        mark();
+        panel.hidden = !panel.hidden;
+        btn.setAttribute("aria-expanded", panel.hidden ? "false" : "true");
+    });
+    panel.addEventListener("click", (event) => event.stopPropagation());
+    document.addEventListener("click", close);
+
+    primary.value = state.palette[0];
+    secondary.value = state.palette[1];
+    mark();
+}
+
 /** Push the live Perspective config back into our toolbar controls. */
 function syncToolbarFromConfig(cfg) {
     if (!cfg) return;
@@ -246,6 +333,87 @@ function syncToolbarFromConfig(cfg) {
     pick($("groupBy"), state.groupBy);
     pick($("splitBy"), state.splitBy);
     pick($("measure"), state.columns.length === 1 ? state.columns : []);
+    window.CPA.refreshSelects();
+}
+
+/* ------------------------------------------------------------- palette */
+
+/**
+ * Chart palettes. The first is the corporate default (red and grey); the
+ * others are opt-in. `state.palette` is kept so a rebuilt viewer inherits it.
+ */
+const PALETTES = [
+    {
+        name: "Red & grey",
+        colors: ["#db0011", "#1a1a1a", "#666666", "#b5000e", "#333333",
+                 "#999999", "#808080", "#c8c8c8"],
+    },
+    {
+        name: "Classic",
+        colors: ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
+                 "#8c564b", "#e377c2", "#7f7f7f"],
+    },
+    {
+        name: "Ocean",
+        colors: ["#0b5394", "#1a7fb5", "#4fb3d9", "#8fd6e8", "#005f73",
+                 "#0a9396", "#94d2bd", "#cfeef7"],
+    },
+    {
+        name: "Warm",
+        colors: ["#b5000e", "#e8590c", "#f08c00", "#ffd43b", "#c92a2a",
+                 "#a61e4d", "#862e9c", "#db0011"],
+    },
+    {
+        name: "Mono",
+        colors: ["#111111", "#3a3a3a", "#5c5c5c", "#7d7d7d", "#9e9e9e",
+                 "#bcbcbc", "#d6d6d6", "#ececec"],
+    },
+];
+
+const PALETTE_KEY = "cpa.palette.v1";
+
+function hexToRgba(hex, alpha) {
+    const value = String(hex).replace("#", "");
+    const full =
+        value.length === 3
+            ? value.split("").map((c) => c + c).join("")
+            : value.padEnd(6, "0").slice(0, 6);
+    const int = parseInt(full, 16);
+    /* eslint-disable no-bitwise */
+    const r = (int >> 16) & 255;
+    const g = (int >> 8) & 255;
+    const b = int & 255;
+    /* eslint-enable no-bitwise */
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+/** Push a palette onto a viewer element as d3fc custom properties. */
+function paintViewer(viewer, colors) {
+    colors.forEach((color, i) => {
+        viewer.style.setProperty(`--d3fc-series-${i + 1}`, color);
+    });
+    viewer.style.setProperty("--d3fc-series", hexToRgba(colors[0], 0.85));
+}
+
+function loadPalette() {
+    try {
+        const raw = localStorage.getItem(PALETTE_KEY);
+        if (raw) {
+            const colors = JSON.parse(raw);
+            if (Array.isArray(colors) && colors.length >= 2) return colors;
+        }
+    } catch (_err) {
+        /* fall through to the default */
+    }
+    return PALETTES[0].colors.slice();
+}
+
+function savePalette(colors) {
+    try {
+        localStorage.setItem(PALETTE_KEY, JSON.stringify(colors));
+    } catch (_err) {
+        /* storage unavailable */
+    }
 }
 
 function firstCategorical() {
@@ -410,17 +578,21 @@ function attachViewerEvents(viewer) {
  * the only reliable way out, so the app heals itself instead of asking the
  * user to refresh.
  */
-async function rebuildViewer() {
+async function rebuildViewer(restoreConfig) {
     const old = $("viewer");
     const fresh = document.createElement("perspective-viewer");
     fresh.id = "viewer";
+    // d3fc caches its colour styles on first draw, so the palette has to be on
+    // the element before the replacement is drawn.
+    paintViewer(fresh, state.palette || PALETTES[0].colors);
     old.replaceWith(fresh);
     attachViewerEvents(fresh);
 
     if (state.table) {
         await fresh.load(state.table);
     }
-    const safe = {
+
+    const next = restoreConfig || {
         plugin: "Datagrid",
         group_by: [],
         split_by: [],
@@ -428,12 +600,13 @@ async function rebuildViewer() {
         filter: [],
         sort: [],
     };
-    await fresh.restore(safe);
-    state.config = safe;
-    state.plugin = "Datagrid";
-    state.groupBy = [];
-    state.splitBy = [];
-    state.columns = state.schema.slice();
+    await fresh.restore(next);
+
+    state.config = next;
+    state.plugin = next.plugin || "Datagrid";
+    state.groupBy = next.group_by || [];
+    state.splitBy = next.split_by || [];
+    state.columns = next.columns || state.schema.slice();
     markActiveView();
 }
 
@@ -582,6 +755,12 @@ function selectKpi(name) {
                 .join("")}
         </dl>
         <ul class="issue-list">${issues}</ul>`;
+
+    // Keep the detail in view: the explorer list is the part that scrolls.
+    const detail = $("kpiDetail");
+    if (detail.scrollIntoView) {
+        detail.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
 }
 
 /* --------------------------------------------------- dataset summary */
@@ -753,6 +932,7 @@ async function loadPerspective() {
     const worker = await perspective.worker();
     const table = await worker.table(arrow);
     state.table = table;
+    paintViewer(viewer, state.palette || PALETTES[0].colors);
 
     // Keep our own config in step with whatever the user builds in the
     // viewer's Pivot panel, so switching views never resets their work.
@@ -793,7 +973,11 @@ function filenameFromHeaders(resp, fallback) {
     return match ? match[1] : fallback;
 }
 
-async function downloadExcel() {
+/* Matches EXCEL_CELL_BUDGET in app.py: beyond this a workbook takes minutes
+   to write, so the view is handed over as CSV instead. */
+const EXCEL_CELL_BUDGET = 500000;
+
+async function downloadTable() {
     const viewer = $("viewer");
     const table = await viewer.getTable();
     if (!table) throw new Error("The dataset is not ready yet.");
@@ -801,7 +985,11 @@ async function downloadExcel() {
     const cfg = viewConfigFrom(await viewer.save());
     const view = await table.view(cfg);
     let arrow;
+    let rows = 0;
+    let cols = 0;
     try {
+        rows = await view.num_rows();
+        cols = await view.num_columns();
         arrow = await view.to_arrow();
     } finally {
         try {
@@ -810,20 +998,35 @@ async function downloadExcel() {
             /* view already gone */
         }
     }
-    if (!arrow || !arrow.byteLength) {
+    if (!arrow || !arrow.byteLength || !rows) {
         throw new Error("The current view has no rows to export.");
     }
 
-    const resp = await fetch("/api/export/xlsx", {
+    const cells = rows * Math.max(1, cols);
+    const asCsv = cells > EXCEL_CELL_BUDGET;
+    const endpoint = asCsv ? "/api/export/csv" : "/api/export/xlsx";
+
+    const resp = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/vnd.apache.arrow.stream" },
         body: arrow,
     });
     if (!resp.ok) {
         const err = await resp.json().catch(() => ({}));
-        throw new Error(err.error || "The workbook could not be built.");
+        throw new Error(err.error || "The export could not be built.");
     }
-    saveBlob(await resp.blob(), filenameFromHeaders(resp, "view.xlsx"));
+    saveBlob(
+        await resp.blob(),
+        filenameFromHeaders(resp, asCsv ? "view.csv" : "view.xlsx")
+    );
+
+    if (asCsv) {
+        toast(
+            `${NUMBER_FMT.format(rows)} rows is too large for a quick Excel ` +
+                "write, so it downloaded as CSV — Excel opens that directly.",
+            "info"
+        );
+    }
 }
 
 /** The d3fc plugin element lives in the viewer's light DOM. */
@@ -971,8 +1174,7 @@ async function downloadCurrentView() {
     btn.textContent = "Preparing…";
     try {
         if (state.plugin === "Datagrid") {
-            await downloadExcel();
-            toast("Workbook downloaded.", "success");
+            await downloadTable();
         } else {
             await downloadPng();
             toast("Chart image downloaded.", "success");
@@ -1004,32 +1206,67 @@ function chatHasCredentials() {
     return Boolean(cfg.endpoint && cfg.api_key);
 }
 
+/**
+ * Report the assistant's real state. Saving a key is not the same as having a
+ * working model, so the label only claims "connected" once a reply has
+ * actually come back.
+ */
 function setChatMode() {
-    const live = chatHasCredentials();
+    const configured = chatHasCredentials();
+    let label;
+    let chip;
+    let note;
+    let live;
 
-    $("chatMode").textContent = live ? "Model connected" : "No model connected";
+    if (!configured) {
+        live = false;
+        label = "No model connected";
+        chip = "No model";
+        note =
+            "No model connected — add an endpoint and API key above to start " +
+            "asking questions.";
+    } else if (state.chatVerified === true) {
+        live = true;
+        label = "Model connected";
+        chip = "Connected";
+        note =
+            "Connected. Answers come from your endpoint — data leaves this " +
+            "machine only if that endpoint is remote.";
+    } else if (state.chatVerified === false) {
+        live = false;
+        label = "Connection failed";
+        chip = "Failed";
+        note =
+            state.chatError ||
+            "The endpoint could not be reached. Check the URL and the API key.";
+    } else {
+        live = false;
+        label = "Model configured — not verified";
+        chip = "Not verified";
+        note =
+            "A model is configured but has not answered yet. Send a question " +
+            "to confirm the connection works.";
+    }
+
+    $("chatMode").textContent = label;
     $("chatMode").classList.toggle("is-live", live);
 
-    const state = $("aiState");
-    if (state) {
-        state.textContent = live ? "Connected" : "No model";
+    const chipEl = $("aiState");
+    if (chipEl) {
+        chipEl.textContent = chip;
         $("chatToggle").classList.toggle("is-live", live);
     }
 
     const status = $("chatStatus");
     if (status) {
         status.classList.toggle("is-live", live);
-        status.textContent = live
-            ? "Connected. Answers come from your endpoint — data leaves this " +
-              "machine only if that endpoint is remote."
-            : "No model connected — add an endpoint and API key above to start " +
-              "asking questions.";
+        status.textContent = note;
     }
 
-    // The connection form is the useful thing to show until a model is set up.
+    // The connection form is the useful thing to show until a model works.
     const toggle = document.querySelector("#chatConnection .group-toggle");
     const panel = $("grpConnection");
-    if (toggle && panel && !live) {
+    if (toggle && panel && state.chatVerified !== true) {
         toggle.setAttribute("aria-expanded", "true");
         panel.hidden = false;
     }
@@ -1099,10 +1336,13 @@ function initChat() {
     );
     $("chatSaveCfg").addEventListener("click", () => {
         saveChatConfig();
+        // A new endpoint or key invalidates whatever we knew before.
+        state.chatVerified = null;
+        state.chatError = "";
         setChatMode();
         toast(
             chatHasCredentials()
-                ? "Connection saved for this browser."
+                ? "Saved. Send a question to confirm the connection works."
                 : "Add both an endpoint and an API key to connect.",
             chatHasCredentials() ? "success" : "warn"
         );
@@ -1147,12 +1387,25 @@ function initChat() {
             });
             const data = await resp.json().catch(() => ({}));
             typing.remove();
+
+            if (data.success && !data.placeholder) {
+                state.chatVerified = true;
+                state.chatError = "";
+            } else if (!data.success) {
+                state.chatVerified = false;
+                state.chatError = data.error || "The model did not answer.";
+            }
+            setChatMode();
+
             addMessage(
                 data.success ? data.reply : data.error || "Something went wrong.",
                 "bot"
             );
         } catch (err) {
             typing.remove();
+            state.chatVerified = false;
+            state.chatError = "Could not reach the local server.";
+            setChatMode();
             addMessage("Could not reach the local server.", "bot");
         }
     }
@@ -1215,11 +1468,15 @@ async function main() {
     initChat();
     markActiveView();
 
+    state.palette = loadPalette();
+    initPalette();
+
     try {
         await loadKpis();
         buildToolbar();
         await renderViewSelect();
         await loadPerspective();
+        window.CPA.enhanceSelects();
     } catch (err) {
         fail(err && err.message ? err.message : String(err));
     }

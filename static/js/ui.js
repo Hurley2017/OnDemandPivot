@@ -115,5 +115,151 @@
         });
     }
 
-    window.CPA = { toast, escapeHtml, dismiss, initCollapsibles };
+    /* ------------------------------------------------------------ selects */
+
+    /**
+     * Replace every native <select> with a styled listbox. The real select is
+     * kept (hidden) so value handling, `change` events and form semantics are
+     * unchanged; only the presentation is ours.
+     */
+    function enhanceSelects(root) {
+        const scope = root || document;
+        scope.querySelectorAll("select").forEach((sel) => {
+            if (sel.dataset.enhanced === "1" || sel.multiple) return;
+            sel.dataset.enhanced = "1";
+
+            const wrap = document.createElement("div");
+            wrap.className = "cselect";
+            sel.parentNode.insertBefore(wrap, sel);
+            wrap.appendChild(sel);
+            sel.classList.add("cselect-native");
+            sel.setAttribute("tabindex", "-1");
+
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "cselect-button";
+            btn.setAttribute("aria-haspopup", "listbox");
+            btn.setAttribute("aria-expanded", "false");
+            btn.innerHTML =
+                '<span class="cselect-label"></span><span class="cselect-arrow"></span>';
+
+            const panel = document.createElement("div");
+            panel.className = "cselect-panel";
+            panel.hidden = true;
+            panel.setAttribute("role", "listbox");
+
+            wrap.appendChild(btn);
+            wrap.appendChild(panel);
+
+            const label = btn.querySelector(".cselect-label");
+
+            const build = () => {
+                panel.innerHTML = "";
+                const addOption = (opt) => {
+                    const item = document.createElement("button");
+                    item.type = "button";
+                    item.className = "cselect-option";
+                    item.dataset.value = opt.value;
+                    item.textContent = opt.textContent;
+                    item.setAttribute("role", "option");
+                    if (opt.value === sel.value) item.classList.add("is-selected");
+                    item.addEventListener("click", () => {
+                        sel.value = opt.value;
+                        sync();
+                        close();
+                        sel.dispatchEvent(new Event("change", { bubbles: true }));
+                    });
+                    panel.appendChild(item);
+                };
+
+                [...sel.children].forEach((child) => {
+                    if (child.tagName === "OPTGROUP") {
+                        const head = document.createElement("div");
+                        head.className = "cselect-group";
+                        head.textContent = child.label;
+                        panel.appendChild(head);
+                        [...child.children].forEach(addOption);
+                    } else if (child.tagName === "OPTION") {
+                        addOption(child);
+                    }
+                });
+            };
+
+            function sync() {
+                const opt = sel.selectedOptions && sel.selectedOptions[0];
+                label.textContent = opt ? opt.textContent : "";
+                btn.disabled = sel.disabled;
+                panel.querySelectorAll(".cselect-option").forEach((el) => {
+                    el.classList.toggle("is-selected", el.dataset.value === sel.value);
+                });
+            }
+
+            function open() {
+                build();
+                sync();
+                panel.hidden = false;
+                btn.setAttribute("aria-expanded", "true");
+                wrap.classList.add("is-open");
+                const cur = panel.querySelector(".cselect-option.is-selected");
+                if (cur && cur.scrollIntoView) cur.scrollIntoView({ block: "nearest" });
+            }
+
+            function close() {
+                panel.hidden = true;
+                btn.setAttribute("aria-expanded", "false");
+                wrap.classList.remove("is-open");
+            }
+
+            btn.addEventListener("click", (event) => {
+                event.stopPropagation();
+                if (panel.hidden) open();
+                else close();
+            });
+
+            btn.addEventListener("keydown", (event) => {
+                if (event.key === "Escape") {
+                    close();
+                    return;
+                }
+                if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+                event.preventDefault();
+                if (panel.hidden) {
+                    open();
+                    return;
+                }
+                const items = [...panel.querySelectorAll(".cselect-option")];
+                const at = items.findIndex((el) => el.classList.contains("is-selected"));
+                const next = Math.min(
+                    items.length - 1,
+                    Math.max(0, at + (event.key === "ArrowDown" ? 1 : -1))
+                );
+                if (items[next]) items[next].click();
+            });
+
+            document.addEventListener("click", (event) => {
+                if (!wrap.contains(event.target)) close();
+            });
+
+            sel.addEventListener("change", sync);
+            sel._cselectSync = sync;
+            build();
+            sync();
+        });
+    }
+
+    /** Re-read the underlying selects (call after rebuilding their options). */
+    function refreshSelects() {
+        document.querySelectorAll("select").forEach((sel) => {
+            if (sel._cselectSync) sel._cselectSync();
+        });
+    }
+
+    window.CPA = {
+        toast,
+        escapeHtml,
+        dismiss,
+        initCollapsibles,
+        enhanceSelects,
+        refreshSelects,
+    };
 })();
