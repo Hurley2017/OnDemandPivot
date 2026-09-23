@@ -459,6 +459,7 @@
     });
 
     window.CPA.initCollapsibles();
+    window.CPA.initGroupBar();
     window.CPA.enhanceSelects();
 
     // Re-profile on any control change. Both `input` and `change` are wired so

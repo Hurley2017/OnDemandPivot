@@ -1275,52 +1275,137 @@ table.data td.null {
 }
 
 /* ==========================================================================
+   Group bar — one row of buttons, each popping up its own panel
+   ========================================================================== */
+
+.group-bar-wrap {
+    position: relative;
+    margin-bottom: 16px;
+}
+
+.group-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--grey-200);
+}
+
+.group-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-family: var(--font);
+    font-size: 12.5px;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    color: var(--grey-600);
+    background: var(--white);
+    border: 1px solid var(--grey-300);
+    border-radius: 20px;
+    padding: 7px 15px;
+    cursor: pointer;
+    transition: background 0.16s ease, color 0.16s ease,
+        border-color 0.16s ease, box-shadow 0.18s ease, transform 0.12s ease;
+}
+
+.group-btn:hover {
+    border-color: var(--black);
+    color: var(--black);
+    transform: translateY(-1px);
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.09);
+}
+
+.group-btn:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(219, 0, 17, 0.2);
+}
+
+.group-btn[aria-expanded="true"] {
+    background: var(--red);
+    border-color: var(--red);
+    color: var(--white);
+    box-shadow: 0 4px 12px rgba(219, 0, 17, 0.28);
+}
+
+.group-btn .chev {
+    width: 0;
+    height: 0;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 5px solid currentColor;
+    opacity: 0.7;
+    transition: transform 0.22s cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+
+.group-btn[aria-expanded="true"] .chev {
+    transform: rotate(180deg);
+}
+
+.group-bar-end {
+    margin-left: auto;
+}
+
+/* The popped-up panel, floating over the preview. */
+.group-panel {
+    position: absolute;
+    top: calc(100% + 10px);
+    left: 0;
+    z-index: 30;
+    width: min(760px, 100%);
+    max-height: min(64vh, 580px);
+    overflow-y: auto;
+    background: var(--white);
+    border: 1px solid var(--grey-200);
+    border-top: 3px solid var(--red);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    padding: 18px 22px 20px;
+    animation: panel-in 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes panel-in {
+    from {
+        opacity: 0;
+        transform: translateY(-8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.panel-head {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    flex-wrap: wrap;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: var(--black);
+    padding-bottom: 12px;
+    margin-bottom: 16px;
+    border-bottom: 1px solid var(--grey-200);
+}
+
+/* ==========================================================================
    Workbench (controls + live preview)
    ========================================================================== */
 
-/* The preview is the main stage: it fills the viewport left over by the pinned
-   header and the pinned KPI strip. The rail is narrower so the table gets the
-   width. Both columns share one height, so unfolding every option group
-   scrolls inside the rail instead of stretching the card. */
+/* The preview is the main stage: with the option panels floating above it,
+   the table now owns the full width. */
 :root {
-    --workbench-h: max(520px, calc(100vh - 232px));
-}
-
-.workbench {
-    display: grid;
-    grid-template-columns: minmax(260px, 322px) minmax(0, 1fr);
-    gap: 20px;
-    align-items: start;
-}
-
-.workbench-controls {
-    height: var(--workbench-h);
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    border: 1px solid var(--grey-200);
-    border-radius: var(--radius);
-    padding: 4px 16px 16px;
-    background: var(--white);
-    scrollbar-width: thin;
-}
-
-.workbench-controls::-webkit-scrollbar {
-    width: 8px;
-}
-
-.workbench-controls::-webkit-scrollbar-thumb {
-    background: var(--grey-300);
-    border-radius: 4px;
-}
-
-.workbench-controls .btn-block {
-    margin-top: 14px;
+    --workbench-h: max(520px, calc(100vh - 240px));
 }
 
 .workbench-preview {
     display: flex;
     flex-direction: column;
     min-width: 0;
+    height: var(--workbench-h);
     border: 1px solid var(--grey-200);
     border-radius: var(--radius);
     overflow: hidden;
@@ -2403,14 +2488,10 @@ perspective-viewer {
    ========================================================================== */
 
 @media (max-width: 1180px) {
-    .workbench {
-        grid-template-columns: minmax(0, 1fr);
-    }
-
-    .workbench-controls {
-        position: static;
-        max-height: none;
-        overflow: visible;
+    /* The option panel can use the whole width once the page is narrow. */
+    .group-panel {
+        width: 100%;
+        max-height: 70vh;
     }
 
     .dash-layout,

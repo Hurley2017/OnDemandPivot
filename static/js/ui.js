@@ -254,11 +254,57 @@
         });
     }
 
+    /**
+     * A row of buttons that each pop up one panel, replacing a stack of
+     * always-visible sections. One panel at a time; click away or press Escape
+     * to close.
+     */
+    function initGroupBar(root) {
+        const scope = root || document;
+        const bar = scope.querySelector(".group-bar");
+        if (!bar) return;
+
+        const buttons = [...bar.querySelectorAll(".group-btn")];
+
+        const closeAll = () => {
+            buttons.forEach((btn) => {
+                btn.setAttribute("aria-expanded", "false");
+                const panel = document.getElementById(btn.dataset.panel || "");
+                if (panel) panel.hidden = true;
+            });
+        };
+
+        buttons.forEach((btn) => {
+            const panel = document.getElementById(btn.dataset.panel || "");
+            if (!panel) return;
+
+            btn.addEventListener("click", (event) => {
+                event.stopPropagation();
+                const wasOpen = btn.getAttribute("aria-expanded") === "true";
+                closeAll();
+                if (!wasOpen) {
+                    btn.setAttribute("aria-expanded", "true");
+                    panel.hidden = false;
+                    const focusable = panel.querySelector("input, select");
+                    if (focusable) focusable.focus({ preventScroll: true });
+                }
+            });
+
+            panel.addEventListener("click", (event) => event.stopPropagation());
+        });
+
+        document.addEventListener("click", closeAll);
+        document.addEventListener("keydown", (event) => {
+            if (event.key === "Escape") closeAll();
+        });
+    }
+
     window.CPA = {
         toast,
         escapeHtml,
         dismiss,
         initCollapsibles,
+        initGroupBar,
         enhanceSelects,
         refreshSelects,
     };
