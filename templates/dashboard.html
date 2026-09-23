@@ -17,6 +17,9 @@
           href="{{ url_for('static', filename='vendor/perspective/cdn/perspective-viewer-datagrid.min.css') }}?v={{ asset_version('vendor/perspective/cdn/perspective-viewer-datagrid.min.css') }}">
     <link rel="stylesheet"
           href="{{ url_for('static', filename='vendor/perspective/cdn/perspective-viewer-d3fc.min.css') }}?v={{ asset_version('vendor/perspective/cdn/perspective-viewer-d3fc.min.css') }}">
+    <!-- Brand font: HSBC Sans if installed, otherwise the vendored Inter. -->
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='vendor/fonts/fonts.css') }}?v={{ asset_version('vendor/fonts/fonts.css') }}">
     <link rel="stylesheet"
           href="{{ url_for('static', filename='css/style.css') }}?v={{ asset_version('css/style.css') }}">
 </head>

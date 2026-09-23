@@ -6,6 +6,9 @@
     <title>Client Profitability Analytics — Import Data</title>
     <link rel="icon"
           href="{{ url_for('static', filename='icon/favicon.png') }}?v={{ asset_version('icon/favicon.png') }}">
+    <!-- Brand font: HSBC Sans if installed, otherwise the vendored Inter. -->
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='vendor/fonts/fonts.css') }}?v={{ asset_version('vendor/fonts/fonts.css') }}">
     <link rel="stylesheet"
           href="{{ url_for('static', filename='css/style.css') }}?v={{ asset_version('css/style.css') }}">
 </head>
@@ -42,13 +45,36 @@
         <div class="card-body">
 
             <!-- ------------------------------------------------ pick a file -->
-            <div id="dropzone" class="dropzone" tabindex="0" role="button"
-                 aria-label="Upload a CSV or Excel file">
-                <div class="dz-icon" aria-hidden="true">⬆</div>
-                <div class="dz-copy">
+            <div id="dropzone" class="dropzone">
+                <div class="dz-body">
+                    <div class="dz-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                             stroke-width="1.6" stroke-linecap="round"
+                             stroke-linejoin="round">
+                            <path d="M12 16V4"></path>
+                            <path d="M7.5 8.5 12 4l4.5 4.5"></path>
+                            <path d="M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15"></path>
+                        </svg>
+                    </div>
                     <div class="dz-title">Drop your file here</div>
-                    <div class="dz-sub">
-                        or <b>browse</b> · .csv, .xlsx, .xlsb · up to 100 MB
+                    <div class="dz-sub">or pick one from this computer</div>
+                    <button class="btn btn-primary dz-browse" id="browseBtn" type="button">
+                        Browse files
+                    </button>
+                    <div class="dz-formats">
+                        <span class="tag">.csv</span>
+                        <span class="tag">.xlsx</span>
+                        <span class="tag">.xlsb</span>
+                        <span class="tag">max 100 MB</span>
+                    </div>
+                </div>
+
+                <!-- Shown while the backend reads and profiles the file. -->
+                <div class="dz-busy" id="dzBusy" hidden>
+                    <span class="spinner spinner-dark" aria-hidden="true"></span>
+                    <div class="dz-busy-copy">
+                        <b id="dzBusyName">Reading your file…</b>
+                        <span id="dzBusyHint">Profiling every column — large files take a moment.</span>
                     </div>
                 </div>
             </div>
@@ -64,31 +90,37 @@
                     <div class="group-bar">
                         <button class="group-btn" type="button"
                                 data-panel="grpProfile" aria-expanded="false">
+                            <span class="btn-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg></span>
                             <span class="chev" aria-hidden="true"></span>
                             Column profile
                         </button>
                         <button class="group-btn" type="button"
                                 data-panel="grpStructure" aria-expanded="false">
+                            <span class="btn-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="2"/><path d="M3.5 9h17M9 9v11.5"/></svg></span>
                             <span class="chev" aria-hidden="true"></span>
                             Structure
                         </button>
                         <button class="group-btn" type="button"
                                 data-panel="grpShape" aria-expanded="false">
+                            <span class="btn-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h11M4 8l3-3M4 8l3 3"/><path d="M20 16H9M20 16l-3-3M20 16l-3 3"/></svg></span>
                             <span class="chev" aria-hidden="true"></span>
                             Table shape
                         </button>
                         <button class="group-btn" type="button"
                                 data-panel="grpRows" aria-expanded="false">
+                            <span class="btn-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></span>
                             <span class="chev" aria-hidden="true"></span>
                             Rows
                         </button>
                         <button class="group-btn" type="button"
                                 data-panel="grpColumns" aria-expanded="false">
+                            <span class="btn-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M7 4v16M12 4v16M17 4v16"/></svg></span>
                             <span class="chev" aria-hidden="true"></span>
                             Columns
                         </button>
                         <button class="group-btn" type="button"
                                 data-panel="grpValues" aria-expanded="false">
+                            <span class="btn-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19 9 5l4 14 3-9 3 5"/></svg></span>
                             <span class="chev" aria-hidden="true"></span>
                             Values
                         </button>

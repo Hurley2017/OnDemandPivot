@@ -1,0 +1,48 @@
+/* ==========================================================================
+   Typeface
+
+   HSBC's own typeface is proprietary and cannot be shipped, so Inter is
+   vendored here (SIL Open Font License) as a close, screen-first stand-in.
+   The stack in style.css still asks for "HSBC Sans" first, so a machine with
+   the real font licensed and installed will use it automatically.
+   ========================================================================== */
+
+@font-face {
+    font-family: "Inter";
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url("inter-400.woff2") format("woff2");
+}
+
+@font-face {
+    font-family: "Inter";
+    font-style: italic;
+    font-weight: 400;
+    font-display: swap;
+    src: url("inter-400-italic.woff2") format("woff2");
+}
+
+@font-face {
+    font-family: "Inter";
+    font-style: normal;
+    font-weight: 500;
+    font-display: swap;
+    src: url("inter-500.woff2") format("woff2");
+}
+
+@font-face {
+    font-family: "Inter";
+    font-style: normal;
+    font-weight: 600;
+    font-display: swap;
+    src: url("inter-600.woff2") format("woff2");
+}
+
+@font-face {
+    font-family: "Inter";
+    font-style: normal;
+    font-weight: 700;
+    font-display: swap;
+    src: url("inter-700.woff2") format("woff2");
+}

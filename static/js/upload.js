@@ -24,6 +24,15 @@
         timedelta: "badge-datetime",
     };
 
+    /* Excel's type names, in the same badge palette as the kind. */
+    const EXCEL_BADGE = {
+        Number: "badge-number",
+        Text: "badge-string",
+        Date: "badge-datetime",
+        Time: "badge-datetime",
+        Boolean: "badge-boolean",
+    };
+
     /* ------------------------------------------------------------ options */
 
     const NUMBER_FIELDS = ["skipRows", "skipCols", "skipLastRows", "skipLastCols",
@@ -86,6 +95,43 @@
     }
 
     /** Put every restructuring control back to the server's defaults. */
+    /* Which controls live in which pop-up panel, so a panel can advertise that
+       its options differ from the defaults. */
+    const GROUP_OPTIONS = {
+        grpStructure: ["skipRows", "skipLastRows", "skipCols", "skipLastCols",
+                       "dataRange", "sheetSelect"],
+        grpShape: ["optHasHeader", "optPromote", "optTranspose"],
+        grpRows: ["optDropRows", "optDropRowsNull", "optDedupe", "dedupeKeep",
+                  "sortBy", "sortDesc"],
+        grpColumns: ["optDropCols", "optConstantCols", "optDuplicateCols",
+                     "optNormalizeCols", "maxMissing", "dropCols"],
+        grpValues: ["optStrip", "optCoerceNumbers", "textCase", "fillMissing",
+                    "roundDecimals", "replaceFind", "replaceWith"],
+    };
+
+    function isDefaultValue(el) {
+        if (!el) return true;
+        if (el.type === "checkbox") return el.checked === el.defaultChecked;
+        // Every select opens on its neutral first option.
+        if (el.tagName === "SELECT") return el.selectedIndex <= 0;
+        return (el.value || "") === (el.defaultValue || "");
+    }
+
+    /** Dot any group whose options have been moved off their defaults. */
+    function markModifiedGroups() {
+        Object.keys(GROUP_OPTIONS).forEach((panelId) => {
+            const btn = document.querySelector(
+                '.group-btn[data-panel="' + panelId + '"]'
+            );
+            if (!btn) return;
+            const changed = GROUP_OPTIONS[panelId].some(
+                (id) => !isDefaultValue($(id))
+            );
+            btn.classList.toggle("is-modified", changed);
+            btn.title = changed ? "Options differ from the defaults" : "";
+        });
+    }
+
     function applyOptions(options) {
         const opts = options || {};
         Object.keys(OPTION_MAP).forEach((id) => {
@@ -126,6 +172,7 @@
             .join("");
         if (chosen && list.includes(chosen)) select.value = chosen;
         window.CPA.refreshSelects();
+        markModifiedGroups();
     }
 
     async function postJSON(url, payload) {
@@ -189,7 +236,9 @@
 
         tbody.innerHTML = profile.fields
             .map((f) => {
-                const badge = KIND_BADGE[f.kind] || "badge-string";
+                // The Type column speaks Excel, since that is what users know.
+                const excel = f.excel || "Text";
+                const badge = EXCEL_BADGE[excel] || "badge-string";
                 const missingTxt = f.missing
                     ? `${f.missing} (${f.missing_pct}%)`
                     : "0";
@@ -205,10 +254,7 @@
                 return `
                 <tr>
                     <td><b>${escapeHtml(f.name)}</b></td>
-                    <td>
-                        <span class="badge ${badge}">${escapeHtml(f.kind)}</span>
-                        <span class="excel-kind">${escapeHtml(f.excel || "")}</span>
-                    </td>
+                    <td><span class="badge ${badge}">${escapeHtml(excel)}</span></td>
                     <td>${escapeHtml(f.dtype)}</td>
                     <td class="${f.missing ? "num null" : "num"}">${escapeHtml(missingTxt)}</td>
                     <td class="num">${escapeHtml(f.unique)}</td>
@@ -279,6 +325,7 @@
         renderPreview(data.preview);
         profileCard.hidden = false;
         previewCard.hidden = false;
+        markModifiedGroups();
     }
 
     /** Hide everything that only exists once a file is loaded. */
@@ -309,6 +356,24 @@
         $("processBtn").hidden = !on;
         $("fileTag").hidden = !on;
         $("metaChips").hidden = !on;
+        if (!on) setBusy(null);
+    }
+
+    /**
+     * Reading state for the drop zone. A large workbook can take several
+     * seconds to parse and profile, so say so instead of looking frozen.
+     */
+    function setBusy(name, hint) {
+        const busy = $("dzBusy");
+        if (!busy) return;
+        if (!name) {
+            busy.hidden = true;
+            return;
+        }
+        $("dzBusyName").textContent = name;
+        $("dzBusyHint").textContent =
+            hint || "Profiling every column — large files take a moment.";
+        busy.hidden = false;
     }
 
     /** Drop the selected file and everything derived from it. */
@@ -382,9 +447,20 @@
             return;
         }
 
+        // Anything past a few megabytes is worth announcing.
+        const size = file.size / 1024 / 1024;
+        setBusy(
+            file.name,
+            size >= 2
+                ? `Reading ${size.toFixed(1)} MB — profiling every column, this can take a moment.`
+                : "Profiling every column…"
+        );
+
         try {
             await uploadBlob(file, file.name);
+            setBusy(null);
         } catch (err) {
+            setBusy(null);
             toast(err.message, "error");
         }
     }
@@ -445,12 +521,11 @@
         handleFile(file);
     });
 
-    dropzone.addEventListener("click", () => fileInput.click());
-    dropzone.addEventListener("keydown", (e) => {
-        if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            fileInput.click();
-        }
+    const pick = () => fileInput.click();
+    dropzone.addEventListener("click", pick);
+    $("browseBtn").addEventListener("click", (e) => {
+        e.stopPropagation(); // the drop zone behind it would open the picker too
+        pick();
     });
 
     fileInput.addEventListener("change", () => {

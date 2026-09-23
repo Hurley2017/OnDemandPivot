@@ -291,6 +291,22 @@
             });
 
             panel.addEventListener("click", (event) => event.stopPropagation());
+
+            // A close button in the panel head, added once.
+            const head = panel.querySelector(".panel-head");
+            if (head && !head.querySelector(".panel-close")) {
+                const close = document.createElement("button");
+                close.type = "button";
+                close.className = "panel-close";
+                close.setAttribute("aria-label", "Close this panel");
+                close.textContent = "×";
+                close.addEventListener("click", (event) => {
+                    event.stopPropagation();
+                    closeAll();
+                    btn.focus({ preventScroll: true });
+                });
+                head.appendChild(close);
+            }
         });
 
         document.addEventListener("click", closeAll);

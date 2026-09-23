@@ -25,8 +25,16 @@
     --amber: #a05a00;
     --blue: #0b5394;
 
-    --font: Arial, "Helvetica Neue", Helvetica, sans-serif;
+    /* HSBC Sans first, so a machine that has the real brand font licensed and
+       installed uses it. Inter (vendored, offline) is the stand-in, then the
+       system UI fonts. */
+    --font: "HSBC Sans", "Inter", "Segoe UI Variable Text", "Segoe UI",
+        system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
     --mono: "Consolas", "SFMono-Regular", Menlo, monospace;
+
+    /* Inter and Segoe UI both expose these; they keep columns of figures
+       aligned in the tables. */
+    --nums: tabular-nums lining-nums;
 
     --radius: 3px;
     --radius-lg: 6px;
@@ -455,7 +463,7 @@ code {
 
 .page {
     width: 100%;
-    padding: 30px 32px 72px;
+    padding: 22px 26px 24px;
 }
 
 .stack {
@@ -633,16 +641,15 @@ code {
     padding: 16px 22px;
 }
 
-/* Compact, horizontal drop zone. */
+/* Drop zone: the one place a file can arrive, so it gets room to breathe. */
 .dropzone {
-    display: flex;
-    align-items: center;
-    gap: 16px;
+    position: relative;
     border: 1.5px dashed var(--grey-300);
-    background: var(--grey-050);
+    background: linear-gradient(180deg, var(--grey-050), var(--white));
     border-radius: var(--radius-lg);
-    padding: 16px 20px;
+    padding: 34px 24px 28px;
     cursor: pointer;
+    text-align: center;
     transition: border-color 0.18s ease, background 0.18s ease,
         box-shadow 0.18s ease;
 }
@@ -650,18 +657,25 @@ code {
 .dropzone:hover,
 .dropzone.is-over {
     border-color: var(--red);
-    background: var(--red-tint);
-    box-shadow: inset 0 0 0 1px rgba(219, 0, 17, 0.12);
+    background: linear-gradient(180deg, var(--red-tint), var(--white));
+    box-shadow: 0 6px 22px rgba(219, 0, 17, 0.1);
 }
 
 .dropzone.is-over .dz-icon {
-    transform: translateY(-3px);
+    transform: translateY(-4px) scale(1.05);
+}
+
+.dz-body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
 }
 
 .dz-icon {
-    flex: 0 0 auto;
-    width: 40px;
-    height: 40px;
+    width: 52px;
+    height: 52px;
+    margin-bottom: 10px;
     border-radius: 50%;
     background: var(--white);
     border: 1px solid var(--grey-200);
@@ -669,33 +683,84 @@ code {
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 18px;
-    transition: transform 0.18s ease;
+    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.07);
+    transition: transform 0.2s cubic-bezier(0.34, 1.4, 0.64, 1);
 }
 
-.dz-copy {
-    flex: 1 1 auto;
-    min-width: 0;
+.dz-icon svg {
+    width: 24px;
+    height: 24px;
 }
 
 .dz-title {
-    font-size: 15px;
+    font-size: 17px;
     font-weight: 700;
     line-height: 1.3;
+    color: var(--black);
 }
 
 .dz-sub {
     color: var(--grey-600);
-    font-size: 12.5px;
+    font-size: 13px;
 }
 
-.dz-sub b {
-    color: var(--red);
-    text-decoration: underline;
+.dz-browse {
+    margin-top: 14px;
+    padding: 9px 24px;
 }
 
-.dz-clear {
+.dz-formats {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-top: 14px;
+}
+
+/* Reading state, shown over the drop zone while the backend works. */
+.dz-busy {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    background: rgba(255, 255, 255, 0.96);
+    border-radius: var(--radius-lg);
+    text-align: left;
+    padding: 0 24px;
+}
+
+/* Two classes deep so it beats the base .spinner rule further down the file. */
+.dz-busy .spinner {
+    width: 26px;
+    height: 26px;
     flex: 0 0 auto;
+    border-width: 3px;
+    border-color: var(--grey-200);
+    border-top-color: var(--red);
+}
+
+.dz-busy-copy {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.35;
+    min-width: 0;
+}
+
+.dz-busy-copy b {
+    font-size: 14px;
+    color: var(--black);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 60vw;
+}
+
+.dz-busy-copy span {
+    font-size: 12px;
+    color: var(--grey-600);
 }
 
 .file-input {
@@ -839,7 +904,16 @@ table.data tbody tr:hover {
 
 table.data td.num {
     text-align: right;
-    font-variant-numeric: tabular-nums;
+    font-variant-numeric: var(--nums);
+}
+
+/* Figures line up wherever numbers are shown. */
+.stat-value,
+.meta-chip b,
+.kpi-meta b,
+.kpi-detail dd,
+.preview-count {
+    font-variant-numeric: var(--nums);
 }
 
 table.data td.null {
@@ -1329,6 +1403,42 @@ table.data td.null {
     box-shadow: 0 4px 12px rgba(219, 0, 17, 0.28);
 }
 
+.group-btn .btn-icon {
+    display: inline-flex;
+    width: 15px;
+    height: 15px;
+    flex: 0 0 auto;
+    color: var(--grey-400);
+    transition: color 0.16s ease;
+}
+
+.group-btn .btn-icon svg {
+    width: 100%;
+    height: 100%;
+}
+
+.group-btn:hover .btn-icon {
+    color: var(--red);
+}
+
+.group-btn[aria-expanded="true"] .btn-icon {
+    color: var(--white);
+}
+
+/* A dot marks a group whose options differ from the defaults. */
+.group-btn.is-modified::after {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--red);
+    flex: 0 0 auto;
+}
+
+.group-btn[aria-expanded="true"].is-modified::after {
+    background: var(--white);
+}
+
 .group-btn .chev {
     width: 0;
     height: 0;
@@ -1391,14 +1501,33 @@ table.data td.null {
     border-bottom: 1px solid var(--grey-200);
 }
 
+.panel-close {
+    margin-left: auto;
+    background: transparent;
+    border: none;
+    color: var(--grey-400);
+    font-size: 19px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 3px;
+    transition: color 0.15s ease, transform 0.15s ease;
+}
+
+.panel-close:hover {
+    color: var(--red);
+    transform: rotate(90deg);
+}
+
 /* ==========================================================================
    Workbench (controls + live preview)
    ========================================================================== */
 
-/* The preview is the main stage: with the option panels floating above it,
-   the table now owns the full width. */
+/* The preview is the main stage. Its height is the viewport minus everything
+   stacked above it (site header, card head, paddings, button bar) so the page
+   itself never scrolls once a file is loaded. */
 :root {
-    --workbench-h: max(520px, calc(100vh - 240px));
+    --chrome-h: 292px;
+    --workbench-h: max(420px, calc(100vh - var(--chrome-h)));
 }
 
 .workbench-preview {
@@ -2084,6 +2213,14 @@ perspective-viewer {
 
 .side-panel .card + .card {
     margin-top: 0;
+}
+
+/* Same design element as the import page's pop-up panels, so the dashboard
+   and the import page read as one product. */
+.side-panel .card {
+    border-top: 3px solid var(--red);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
 }
 
 .side-panel .card-head {
