@@ -876,7 +876,9 @@ function renderSummary(profile) {
         add("In memory", humanBytes(profile.memory_bytes), "cleaned frame");
     }
     if (profile.file_bytes) {
-        add("Source file", humanBytes(profile.file_bytes), "as uploaded");
+        // The header is bare now, so the file name lives here.
+        add("Source file", humanBytes(profile.file_bytes),
+            profile.filename || "as uploaded");
     }
 
     $("summaryTag").textContent = `${tiles.length} measures`;
@@ -891,21 +893,6 @@ function renderSummary(profile) {
         )
         .join("");
 
-    const navMeta = $("navMeta");
-    if (navMeta) {
-        navMeta.textContent =
-            `${NUMBER_FMT.format(profile.rows || 0)} rows × ` +
-            `${NUMBER_FMT.format(profile.cols || 0)} cols · ` +
-            `${profile.flagged_fields || 0} flagged` +
-            (profile.file_bytes ? ` · ${humanBytes(profile.file_bytes)}` : "");
-    }
-    if (profile.filename) {
-        const navFile = $("navFile");
-        if (navFile) {
-            navFile.textContent = profile.filename;
-            navFile.title = profile.filename;
-        }
-    }
 }
 
 async function loadKpis() {
@@ -1322,7 +1309,8 @@ function initChat() {
     const setOpen = (open) => {
         dock.hidden = !open;
         layout.classList.toggle("chat-open", open);
-        toggle.classList.toggle("is-open", open);
+        // The floating button steps aside while the panel is open.
+        toggle.hidden = open;
         toggle.setAttribute("aria-expanded", open ? "true" : "false");
         if (open) {
             setChatMode();

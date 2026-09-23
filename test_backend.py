@@ -344,4 +344,27 @@ assert client.get("/api/kpis").status_code == 404
 print("  dashboard falls back to the import page ->",
       client.get("/dashboard").status_code)
 
+# --- 14. session endpoint (lets the import page restore itself) -------------
+print("\nsession endpoint:")
+client.post("/api/reset")
+r = client.get("/api/session")
+print("  after reset  ->", r.get_json())
+assert r.get_json()["loaded"] is False
+
+up()
+r = client.get("/api/session")
+j = r.get_json()
+print("  after upload -> loaded=%s file=%r rows=%s sheets=%s"
+      % (j["loaded"], j["filename"], j["profile"]["rows"], j["sheets"]))
+assert j["loaded"] is True
+assert j["filename"] == "Sample Finance Data.xlsx"
+assert j["profile"]["rows"] == 700
+assert len(j["preview"]["records"]) == 100
+assert "options" in j and j["processed"] is False
+
+client.post("/process", json={})
+j = client.get("/api/session").get_json()
+print("  after process-> processed=%s" % j["processed"])
+assert j["processed"] is True
+
 print("\nALL BACKEND TESTS PASSED")

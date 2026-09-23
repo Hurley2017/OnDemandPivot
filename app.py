@@ -1278,6 +1278,36 @@ def upload():
     )
 
 
+@app.route("/api/session")
+def api_session():
+    """
+    Describe the upload currently held in memory.
+
+    The import page calls this on load, so coming back from the dashboard (or
+    simply reloading) restores the file that is already open instead of
+    presenting an empty drop zone.
+    """
+    profile = SESSION_DATA.get("profile")
+    frame = SESSION_DATA.get("df")
+    if not SESSION_DATA.get("path") or profile is None or frame is None:
+        return jsonify({"success": True, "loaded": False})
+
+    return jsonify(
+        {
+            "success": True,
+            "loaded": True,
+            "filename": (
+                SESSION_DATA.get("display_name") or SESSION_DATA.get("filename")
+            ),
+            "profile": profile,
+            "preview": _df_preview(frame),
+            "options": SESSION_DATA.get("options") or dict(DEFAULT_OPTIONS),
+            "sheets": SESSION_DATA.get("sheets") or [],
+            "processed": SESSION_DATA.get("processed_df") is not None,
+        }
+    )
+
+
 @app.route("/api/reset", methods=["POST"])
 def api_reset():
     """Forget the uploaded file (used by the import page's Clear button)."""

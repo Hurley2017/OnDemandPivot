@@ -215,10 +215,6 @@
             })
             .join("");
 
-        $("profileTag").textContent = profile.flagged_fields
-            ? `${profile.flagged_fields} column(s) flagged`
-            : "No anomalies detected";
-
         fillColumnSelects(profile.fields.map((f) => f.name));
     }
 
@@ -273,10 +269,6 @@
         const scrollNote = preview.shown > 20 ? " · scroll the table" : "";
         $("previewCount").textContent =
             `${preview.shown} of ${preview.total} rows${colNote}${scrollNote}`;
-        $("previewTag").textContent =
-            `${preview.total} rows × ${preview.cols_total || preview.fields.length} cols`;
-        $("footSummary").textContent =
-            `${preview.total} rows × ${preview.fields.length} columns ready to explore.`;
     }
 
     function renderAll(data) {
@@ -289,16 +281,16 @@
 
     /* --------------------------------------------------------- upload flow */
 
-    function setNavMeta(name, text, size) {
-        $("navFile").textContent = name || "No dataset loaded";
-        $("navMeta").textContent = text || "Import & structure";
+    /* The only place the file name is shown, now that the header is bare. */
+    function setFileTag(name, size) {
         $("fileTag").textContent = name
             ? name + (size ? ` · ${size}` : "")
             : "No file selected";
     }
 
-    function showClear(on) {
+    function showLoaded(on) {
         $("clearFileBtn").hidden = !on;
+        $("processBtn").hidden = !on;
     }
 
     /** Drop the selected file and everything derived from it. */
@@ -312,8 +304,8 @@
         previewCard.hidden = true;
         fileInput.value = "";
         applyOptions(null);
-        showClear(false);
-        setNavMeta(null, null);
+        showLoaded(false);
+        setFileTag(null);
         clearTimeout(previewTimer);
         previewSeq += 1; // abandon any preview still in flight
         toast("File cleared. Choose another one to continue.", "info");
@@ -332,24 +324,36 @@
         renderSheets(data.sheets, data.options && data.options.sheet);
         applyOptions(data.options);
         renderAll(data);
-        showClear(true);
+        showLoaded(true);
 
         const shown = (data.profile && data.profile.filename) || name;
-        const sheetNote =
-            data.sheets && data.sheets.length > 1
-                ? ` · ${data.sheets.length} sheets`
-                : "";
-        setNavMeta(
-            shown,
-            `${data.profile.rows} rows × ${data.profile.cols} cols · ` +
-                `${data.profile.flagged_fields} flagged${sheetNote}`,
-            `${(blob.size / 1024).toFixed(1)} KB`
-        );
+        setFileTag(shown, `${(blob.size / 1024).toFixed(1)} KB`);
         toast(
             `Loaded ${shown} — ${data.profile.rows} rows × ` +
                 `${data.profile.cols} columns.`,
             "success"
         );
+    }
+
+    /**
+     * Re-attach to an upload the server still holds. Without this, coming back
+     * from the dashboard (or a plain reload) looked like a fresh start.
+     */
+    async function restoreSession() {
+        let data;
+        try {
+            const resp = await fetch("/api/session");
+            data = await resp.json();
+        } catch (_err) {
+            return; // nothing to restore, the drop zone is already there
+        }
+        if (!data || !data.success || !data.loaded) return;
+
+        renderSheets(data.sheets, data.options && data.options.sheet);
+        applyOptions(data.options);
+        renderAll(data);
+        showLoaded(true);
+        setFileTag(data.filename);
     }
 
     async function handleFile(file) {
@@ -468,7 +472,7 @@
         if (busy) return;
         busy = true;
         const label = btn.innerHTML;
-        btn.disabled = true;
+        btn.classList.add("is-busy");
         btn.innerHTML = '<span class="spinner"></span> Preparing…';
         try {
             const data = await postJSON("/process", readOptions());
@@ -476,8 +480,11 @@
         } catch (err) {
             toast(err.message, "error");
             busy = false;
-            btn.disabled = false;
+            btn.classList.remove("is-busy");
             btn.innerHTML = label;
         }
     });
+
+    // Pick up an upload that is still open on the server.
+    restoreSession();
 })();
