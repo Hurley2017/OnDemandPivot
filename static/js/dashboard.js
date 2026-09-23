@@ -1830,8 +1830,9 @@ function setChatMode() {
         chip = "Connected";
         note =
             "Connected. The assistant reads this dataset and can build pivots " +
-            "and charts for you — data leaves this machine only if the endpoint " +
-            "above is remote.";
+            "and charts for you. A stronger tool-calling model drives it more " +
+            "reliably — data leaves this machine only if the endpoint above is " +
+            "remote.";
     } else if (state.chatVerified === false) {
         live = false;
         label = "Connection failed";

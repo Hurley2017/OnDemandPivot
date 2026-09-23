@@ -163,10 +163,30 @@ apart from the endpoint the user names.
 Credentials now go straight from the browser to that endpoint rather than via
 Flask, so the endpoint must send CORS headers. llama.cpp's server does.
 
+**What the agent actually receives.** Forcing one `get_schema` round trip and
+logging what the agent feeds back confirms the tool results are real:
+
+```json
+{"table":"dataset",
+ "columns":{"Reported ($m)":"string","2025-09-30 00:00:00":"float", …},
+ "num_rows":57}
+```
+
+**Model quality is the limit, not the plumbing.** A local llama.cpp server
+(`--jinja`, Qwen2.5-7B-Instruct Q4_K_M) answered "how many rows and columns"
+correctly on the sample, and *hallucinated* the figures on the HSBC workbook
+even though the tool result above was correct and in its context. It also
+reliably switched plugin (`Y Bar`) but mishandled `sort` arguments and reached
+for `add_panel` when asked to regroup. Smaller models (Llama-3.2-3B) burned the
+agent's 16-turn budget without converging. Treat a strong tool-calling model as
+a requirement for the assistant's *action* features; plain questions about the
+data are well within a 7B's reach.
+
 **Verified after the upgrade:** all 13 views render `Ready`; a hand-built pivot
 survives every palette change and view switch; xlsx and PNG exports both produce
-valid files; **zero off-machine requests** in the network audit; no console
-errors; and the assistant answers correctly against a local llama.cpp model.
+valid files; **zero off-machine requests** in the network audit (including with
+a local model configured); no console errors; and the agent reads the real
+schema of a 21-sheet HSBC results workbook.
 
 ---
 
