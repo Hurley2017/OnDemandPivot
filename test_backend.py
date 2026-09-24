@@ -528,4 +528,23 @@ print("  junk colour -> header fill %s (fell back)"
       % book["View"].cell(row=1, column=1).fill.start_color.rgb)
 assert book["View"].cell(row=1, column=1).fill.start_color.rgb == "00DB0011"
 
+# The gradient option must survive into the workbook as a real colour scale,
+# and must be absent when it is off.
+for query, want_rules in [("", 0),
+                          ("&gradient=1&low=0B5394&high=F08C00", 10)]:
+    r = client.post("/api/export/xlsx?primary=DB0011" + query, data=arrow,
+                    content_type="application/vnd.apache.arrow.stream")
+    assert r.status_code == 200, r.get_json()
+    sheet = load_workbook(io.BytesIO(r.data))["View"]
+    ranges = list(sheet.conditional_formatting)
+    rules = sum(len(x.rules) for x in ranges)
+    print("  gradient %-4s -> %d colour-scale rule(s)"
+          % ("on" if want_rules else "off", rules))
+    assert rules == want_rules, (query, rules)
+    if want_rules:
+        rule = ranges[0].rules[0]
+        assert rule.type == "colorScale", rule.type
+        colours = [c.rgb for c in rule.colorScale.color]
+        assert "000B5394" in colours and "00F08C00" in colours, colours
+
 print("\nALL BACKEND TESTS PASSED")

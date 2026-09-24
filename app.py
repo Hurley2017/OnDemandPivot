@@ -66,13 +66,15 @@ EXCEL_BANDING_BUDGET = 120_000
 EXCEL_DEFAULT_PRIMARY = "#db0011"
 
 
-def _excel_theme(primary):
+def _excel_theme(primary, gradient=False, low=None, high=None):
     """
     Colours for the exported sheet, derived from the dashboard's palette.
 
     The header takes the palette's primary and its text flips to black when that
     colour is too pale to carry white — the same rule the on-screen grid uses, so
-    the workbook and the dashboard agree.
+    the workbook and the dashboard agree. When the gradient option is on, the
+    palette's second and third colours come through as the two ends of a
+    value-based colour scale.
     """
     raw = (primary or "").strip()
     if not re.fullmatch(r"#?[0-9a-fA-F]{6}", raw or ""):
@@ -94,7 +96,19 @@ def _excel_theme(primary):
         return round((channel + (1 - channel) * amount) * 255)
 
     zebra = "".join(f"{tint(c, 0.955):02X}" for c in (r, g, b))
-    return {"primary": hex_only, "on_primary": on_primary, "zebra": zebra}
+
+    def clean(value, fallback):
+        text = (value or "").strip().lstrip("#").upper()
+        return text if re.fullmatch(r"[0-9a-fA-F]{6}", text) else fallback
+
+    return {
+        "primary": hex_only,
+        "on_primary": on_primary,
+        "zebra": zebra,
+        "gradient": bool(gradient),
+        "low": clean(low, "1A1A1A"),
+        "high": clean(high, "DB0011"),
+    }
 
 
 def _write_themed_sheet(sheet, frame, theme):
@@ -137,6 +151,55 @@ def _write_themed_sheet(sheet, frame, theme):
         letter = get_column_letter(position)
         sheet.column_dimensions[letter].width = min(
             42, max(11, len(str(name)) + 3)
+        )
+
+    if theme.get("gradient"):
+        _add_colour_scale(sheet, frame, theme)
+
+
+def _add_colour_scale(sheet, frame, theme):
+    """
+    Colour numeric cells by value, matching the grid's ramp.
+
+    A real Excel colour scale rather than painted fills: it stays live if the
+    numbers are edited, it costs one rule per column instead of a fill on every
+    cell, and it reads as a scale in the formula bar. The stops mirror the
+    dashboard — the palette's second colour below zero, white at zero, the third
+    colour above — scaled by the column's own largest magnitude.
+    """
+    from openpyxl.formatting.rule import ColorScaleRule
+    from openpyxl.utils import get_column_letter
+
+    numeric = [
+        name for name in frame.columns
+        if pd.api.types.is_numeric_dtype(frame[name])
+    ]
+    if not numeric:
+        return
+
+    last_row = len(frame) + 1
+    for name in numeric:
+        series = frame[name].dropna()
+        if series.empty:
+            continue
+        magnitude = max(abs(float(series.min())), abs(float(series.max())))
+        if magnitude <= 0:
+            continue
+
+        column = frame.columns.get_loc(name)
+        letter = get_column_letter(column + 1)
+        cell_range = f"{letter}2:{letter}{last_row}"
+
+        sheet.conditional_formatting.add(
+            cell_range,
+            ColorScaleRule(
+                start_type="num", start_value=-magnitude,
+                start_color=theme["low"],
+                mid_type="num", mid_value=0,
+                mid_color="FFFFFF",
+                end_type="num", end_value=magnitude,
+                end_color=theme["high"],
+            ),
         )
 
 
@@ -1709,7 +1772,12 @@ def api_export_xlsx():
         sheet = book.create_sheet("View")
         sheet.freeze_panes = "A2"
 
-        theme = _excel_theme(request.args.get("primary"))
+        theme = _excel_theme(
+            request.args.get("primary"),
+            gradient=request.args.get("gradient") == "1",
+            low=request.args.get("low"),
+            high=request.args.get("high"),
+        )
         _write_themed_sheet(sheet, frame, theme)
         book.save(buffer)
     except Exception as exc:  # noqa: BLE001

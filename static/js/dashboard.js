@@ -2178,8 +2178,14 @@ async function downloadTable() {
     const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
     // The workbook carries the table's colours, so a download looks like what
     // was on screen.
-    const primary = (state.palette || PALETTES[0].colors)[0] || "#db0011";
-    const themeQuery = `?primary=${encodeURIComponent(primary)}`;
+    const colors = state.palette || PALETTES[0].colors;
+    const primary = colors[0] || "#db0011";
+    const themeQuery = "?primary=" + encodeURIComponent(primary) +
+        (state.gradient
+            ? "&gradient=1" +
+              "&low=" + encodeURIComponent(colors[1] || "#1a1a1a") +
+              "&high=" + encodeURIComponent(colors[2] || primary)
+            : "");
 
     if (cells > EXCEL_CELL_BUDGET) {
         // v5 can serialise the current view to CSV itself, which avoids posting
