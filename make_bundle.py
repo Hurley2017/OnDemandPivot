@@ -1,69 +1,106 @@
 """
-Build one self-extracting .txt bundle of the whole project.
+Build one self-extracting, plain-text bundle of the whole project.
 
-The output is a single text file that is *also* a runnable Python program, so it
-can be carried to a machine that forbids .py files in transit and unpacked there
-with nothing but Python itself:
+Two things have to be true at once:
 
-    python OnDemandPivot-Bundle.txt
+  * it is ONE .txt, because that is all that may cross the company email, and it
+    must unpack with nothing else travelling alongside it;
+  * it reads as source, not as a single opaque blob, so it can be eyeballed and
+    does not look like an encoded payload to a mail scanner.
 
-Everything git tracks is included (so test fixtures and local sample data are
-excluded by construction). The payload is a zip, base64-encoded, which keeps
-every byte — including CRLF endings — exactly as it is here.
+So the file is a small Python program followed by the project's files as plain
+delimited records inside one raw string. Text files appear verbatim; only true
+binaries (the WASM engine, the font, the icons) are base64-encoded.
+
+    python OnDemandPivot-Bundle.txt [output-dir]
+
+Everything git tracks is included, so fixtures and local sample data are
+excluded by construction.
 
 Regenerate with:  python make_bundle.py [output.txt]
 """
 import base64
-import io
 import os
 import subprocess
 import sys
-import zipfile
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 OUT = sys.argv[1] if len(sys.argv) > 1 else os.path.join(
     os.path.expanduser("~"), "Desktop", "OnDemandPivot-Bundle.txt")
 
 SKIP_PREFIX = (".git", "tests/fixtures/")
+TEXT_EXT = {".py", ".js", ".css", ".html", ".md", ".txt", ".json",
+            ".yml", ".yaml", ".cfg", ".ini", ".toml", ""}
+
+# The payload sits in a raw triple-quoted string, so a file containing the
+# closing delimiter cannot be embedded verbatim.
+CLOSER = "'''"
 
 files = subprocess.run(
     ["git", "ls-files"], cwd=ROOT, capture_output=True, text=True, check=True
 ).stdout.split()
 files = [f for f in files if not f.startswith(SKIP_PREFIX)]
 
-buffer = io.BytesIO()
+records = []
 raw_total = 0
-with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
-    for rel in sorted(files):
-        path = os.path.join(ROOT, rel.replace("/", os.sep))
-        if not os.path.isfile(path):
-            continue
-        blob = open(path, "rb").read()
-        raw_total += len(blob)
-        # Zip stores the bytes; a fixed date keeps rebuilds reproducible.
-        info = zipfile.ZipInfo(rel, date_time=(2026, 1, 1, 0, 0, 0))
-        info.compress_type = zipfile.ZIP_DEFLATED
-        info.external_attr = 0o644 << 16
-        zf.writestr(info, blob)
+encoded_binary = 0
+for rel in sorted(files):
+    path = os.path.join(ROOT, rel.replace("/", os.sep))
+    if not os.path.isfile(path):
+        continue
+    blob = open(path, "rb").read()
+    raw_total += len(blob)
 
-payload = base64.b64encode(buffer.getvalue()).decode("ascii")
+    kind = "text"
+    lineend = "lf"
+    body = None
+    if os.path.splitext(rel)[1].lower() in TEXT_EXT:
+        try:
+            body = blob.decode("utf-8")
+        except UnicodeDecodeError:
+            body = None
+        # A raw string cannot hold its own terminator, and cannot end on a
+        # backslash that would escape it.
+        if body is not None and (CLOSER in body or body.rstrip("\n").endswith("\\")):
+            body = None
+        # Python normalises CRLF inside source, so carriage returns would be
+        # lost. Record the convention and normalise the embedded copy; the
+        # reader puts them back. A file is only "crlf" when *every* newline is
+        # part of a CRLF pair — anything mixed travels as base64 to stay exact.
+        if body is not None and "\r\n" in body:
+            if body.count("\n") == body.count("\r\n"):
+                lineend = "crlf"
+                body = body.replace("\r\n", "\n")
+            else:
+                body = None
 
-# The payload is wrapped so no single line is enormous; the reader strips the
-# newlines before decoding.
-WRAP = 96
-lines = [payload[i:i + WRAP] for i in range(0, len(payload), WRAP)]
+    if body is None:
+        body = base64.b64encode(blob).decode("ascii")
+        kind = "base64"
+        lineend = "lf"
+        encoded_binary += 1
+
+    records.append(
+        f"### FILE: {rel}\n"
+        f"### SIZE: {len(blob)}\n"
+        f"### ENCODING: {kind}\n"
+        f"### LINEENDINGS: {lineend}\n"
+        f"{body}\n"
+        f"### END FILE"
+    )
+
+payload = "\n".join(records)
 
 TEMPLATE = '''#!/usr/bin/env python3
 """
 OnDemandPivot - self-extracting source bundle.
 
-Carry this one .txt file. Nothing else is needed: it is a Python program as
-well as a text file, so it can be run straight from its own name.
+Carry this one .txt file; nothing else is needed. It is a Python program as well
+as a text file, so it runs straight from its own name:
 
     python OnDemandPivot-Bundle.txt [output-dir]
 
-It unpacks the whole project (app, dashboard, vendored Perspective engine and
-font - everything) into ./OnDemandPivot by default. Then:
+It unpacks the whole project into ./OnDemandPivot by default, then:
 
     cd OnDemandPivot
     pip install -r requirements.txt
@@ -72,30 +109,69 @@ font - everything) into ./OnDemandPivot by default. Then:
 Nothing is downloaded at runtime: the app serves every asset from disk, so it
 works on a machine with no internet access.
 
-Files: {count}    Uncompressed: {raw:,} bytes    Bundle: {bundle:,} bytes
+The project's files follow as plain delimited records. Text files are verbatim;
+only true binaries are base64. To read one, search for "### FILE: app.py".
+
+Files: {count}    Text: {text_count}    Binary: {binary_count}
+Uncompressed: {raw:,} bytes    This file: {bundle:,} bytes
 """
 
 import base64
 import os
 import sys
-import zipfile
-from io import BytesIO
 
-PAYLOAD = """\\
+PAYLOAD = r\'\'\'
 {payload}
-"""
+\'\'\'
 
 
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     out = argv[0] if argv else "OnDemandPivot"
 
-    data = base64.b64decode("".join(PAYLOAD.split()))
-    with zipfile.ZipFile(BytesIO(data)) as archive:
-        names = archive.namelist()
-        archive.extractall(out)
+    marker = "### FILE: "
+    endmark = "### END FILE"
+    written = 0
 
-    print("Unpacked %d files into %s" % (len(names), os.path.abspath(out)))
+    text = PAYLOAD
+    while True:
+        start = text.find(marker)
+        if start < 0:
+            break
+        stop = text.find(endmark, start)
+        if stop < 0:
+            break
+
+        record = text[start:stop]
+        text = text[stop + len(endmark):]
+
+        lines = record.split("\\n")
+        rel = lines[0][len(marker):].strip()
+        size = int(lines[1].split(": ", 1)[1])
+        encoding = lines[2].split(": ", 1)[1].strip()
+        lineend = lines[3].split(": ", 1)[1].strip()
+
+        # Everything after the four header lines, minus the blank we added.
+        body = "\\n".join(lines[4:])
+        if body.endswith("\\n"):
+            body = body[:-1]
+
+        data = base64.b64decode(body) if encoding == "base64" else body.encode("utf-8")
+        # Carriage returns cannot survive source, so they are put back here.
+        if lineend == "crlf":
+            data = data.replace(b"\\n", b"\\r\\n")
+        if len(data) != size:
+            raise SystemExit(
+                "%s: expected %d bytes, rebuilt %d" % (rel, size, len(data))
+            )
+
+        target = os.path.join(out, rel.replace("/", os.sep))
+        os.makedirs(os.path.dirname(target) or ".", exist_ok=True)
+        with open(target, "wb") as handle:
+            handle.write(data)
+        written += 1
+
+    print("Unpacked %d files into %s" % (written, os.path.abspath(out)))
     print()
     print("Next:")
     print("    cd %s" % out)
@@ -108,18 +184,21 @@ if __name__ == "__main__":
     raise SystemExit(main())
 '''
 
+text_count = len(records) - encoded_binary
 text = TEMPLATE.format(
-    count=len(files),
+    payload=payload,
+    count=len(records),
+    text_count=text_count,
+    binary_count=encoded_binary,
     raw=raw_total,
     bundle=len(payload),
-    payload="\n".join(lines),
 )
 
 with open(OUT, "w", encoding="utf-8", newline="\n") as fh:
     fh.write(text)
 
 print(f"wrote {OUT}")
-print(f"  files: {len(files)}")
+print(f"  files: {len(records)}  (text {text_count}, base64 {encoded_binary})")
 print(f"  uncompressed: {raw_total:,} bytes")
 print(f"  bundle: {os.path.getsize(OUT):,} bytes")
-print("  transferable as .txt, runnable with: python", os.path.basename(OUT))
+print("  run with: python", os.path.basename(OUT))
