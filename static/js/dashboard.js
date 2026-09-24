@@ -52,6 +52,9 @@ const state = {
     // table is always banded, so that is not a choice.
     nameRowHeader: false,
     nullDash: true,
+    // Value-based colour on the numeric columns, using the palette's second and
+    // third colours.
+    gradient: false,
     fields: [],        // [{name, kind, ...}] from /api/kpis
     schema: [],        // raw column names in frame order
     numeric: [],       // subset of schema
@@ -105,6 +108,7 @@ const VIEW_CONFIG_KEYS = [
     "filter_op",
     "group_rollup_mode",
     "split_rollup_mode",
+    "columns_config",
 ];
 
 /**
@@ -861,6 +865,16 @@ function initFields() {
     wireFlag("optHeaderNames", "nameRowHeader");
     wireFlag("optNullDash", "nullDash");
 
+    // The gradient is part of the view config, so it re-applies rather than
+    // just restyling.
+    const gradient = $("optGradient");
+    if (gradient) {
+        gradient.addEventListener("change", () => {
+            state.gradient = gradient.checked;
+            refreshView();
+        });
+    }
+
     // The Filters window is a drop target in its own right: a field dropped
     // there becomes a condition, so there is one place to look rather than a
     // chip box mirroring a list kept elsewhere.
@@ -1445,6 +1459,44 @@ function chartColumns() {
  * Resolve a complete Perspective config for `spec`, or `null` when the
  * dataset cannot support that view. Never returns a partial config.
  */
+/**
+ * Value-based colour for the numeric columns.
+ *
+ * Perspective's datagrid colours a cell from a stop ramp scaled by the value:
+ * negative maps toward the first stop, zero to the middle and positive toward
+ * the last. So the palette's second and third colours become the two ends with
+ * white between them — the primary stays on the headers — and each column is
+ * scaled by its own largest magnitude (from the profile) rather than a guessed
+ * constant, so a column of percentages and a column of millions both read well.
+ */
+function gradientColumnsConfig() {
+    if (!state.gradient) return undefined;
+    const colors = state.palette || PALETTES[0].colors;
+    const low = colors[1] || "#1a1a1a";
+    const high = colors[2] || colors[0] || "#db0011";
+
+    const out = {};
+    state.numeric.forEach((name) => {
+        const field = (state.fields || []).find((f) => f.name === name);
+        const stats = (field && field.stats) || {};
+        const magnitude = Math.max(
+            Math.abs(Number(stats.min) || 0),
+            Math.abs(Number(stats.max) || 0)
+        );
+        out[name] = {
+            bg_mode: "gradient",
+            // The datagrid parses a CSS colour or gradient into its stops, so
+            // the ramp is handed over as a gradient string. The palette's second
+            // and third colours are the two ends, white sits at the midpoint.
+            bg_color: `linear-gradient(to right, ${low}, #ffffff 50%, ${high})`,
+            // A zero scale would collapse the ramp, so a flat column falls back
+            // to 1 and simply paints its midpoint.
+            bg_gradient: magnitude > 0 ? magnitude : 1,
+        };
+    });
+    return Object.keys(out).length ? out : undefined;
+}
+
 function buildViewConfig(spec) {
     const cfg = rawViewConfig(spec);
     if (!cfg) return null;
@@ -1455,6 +1507,7 @@ function buildViewConfig(spec) {
         table: TABLE_NAME,
         group_rollup_mode: state.grandTotals || "rollup",
         split_rollup_mode: state.columnSubtotals || "rollup",
+        columns_config: gradientColumnsConfig(),
     };
 }
 

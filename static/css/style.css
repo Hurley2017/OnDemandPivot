@@ -506,15 +506,16 @@ code {
 }
 
 /* Workbook and worksheet read as one unit: which file, and which sheet inside
-   it. Laid out on one line so the header stays shallow — no `overflow: hidden`
-   here, because the worksheet picker's panel has to escape the block. */
+   it, as a pill. No `overflow: hidden` here, because the worksheet picker's
+   panel has to escape the block. */
 .wb-group {
     display: flex;
     align-items: center;
     gap: 0;
+    padding: 0 5px;
     background: var(--grey-050);
     border: 1px solid var(--grey-300);
-    border-radius: var(--radius);
+    border-radius: 999px;
 }
 
 .wb-item {
@@ -526,11 +527,11 @@ code {
 }
 
 .wb-item:first-child {
-    border-radius: var(--radius) 0 0 var(--radius);
+    border-radius: 999px 0 0 999px;
 }
 
 .wb-item:last-child {
-    border-radius: 0 var(--radius) var(--radius) 0;
+    border-radius: 0 999px 999px 0;
 }
 
 /* Only the worksheet half gets a divider, so a single-sheet workbook shows one
