@@ -41,6 +41,11 @@ SKIP_PREFIX = (".git", "tests/fixtures/")
 # The vendored engine and font: large, binary, and unchanged between feature
 # work. They travel once, in the full bundle.
 SOURCE_ONLY_SKIP = ("static/vendor/",)
+
+# Bundles are generated, and once committed they are git-tracked — so without
+# this the generator would pack the previous bundle into the next one, doubling
+# its size every round.
+GENERATED_NAMES = ("OnDemandPivot-Update.txt", "OnDemandPivot-Bundle.txt")
 TEXT_EXT = {".py", ".js", ".css", ".html", ".md", ".txt", ".json",
             ".yml", ".yaml", ".cfg", ".ini", ".toml", ""}
 
@@ -54,6 +59,7 @@ files = subprocess.run(
 files = [f for f in files if not f.startswith(SKIP_PREFIX)]
 if SOURCE_ONLY:
     files = [f for f in files if not f.startswith(SOURCE_ONLY_SKIP)]
+files = [f for f in files if os.path.basename(f) not in GENERATED_NAMES]
 
 records = []
 raw_total = 0
