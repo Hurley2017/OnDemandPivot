@@ -3,6 +3,14 @@ import io
 import os
 import sys
 
+# Anomaly text can contain non-ASCII (arrows, em dashes); a Windows console
+# defaults to CP1252 and would fail on the print, not on the assertion.
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
+except Exception:  # noqa: BLE001 - older interpreters, or a redirected pipe
+    pass
+
 import app as m
 import pandas as pd
 import pyarrow as pa
@@ -59,10 +67,14 @@ print("\n  Date sample value:", j["preview"]["records"][0]["Date"])
 kinds = {f["name"]: f["kind"] for f in p["fields"]}
 assert kinds["Year"] == "number" and kinds["Month Number"] == "number", kinds
 
-# Country case/spacing variants must be flagged.
+# Country case/spacing variants must be flagged, with a worked example and the
+# option that fixes it, so the warning is actionable rather than just alarming.
 country = next(f for f in p["fields"] if f["name"] == "Country")
-assert any("case/spacing" in a for a in country["anomalies"]), country
-print("  Country anomalies:", country["anomalies"])
+case_note = next(a for a in country["anomalies"] if "case" in a)
+print("  Country anomaly:", case_note)
+assert "separate groups" in case_note, case_note
+assert "'CANADA' vs 'Canada'" in case_note, case_note
+assert "Text case" in case_note, case_note
 
 # --- 2. skip_cols -----------------------------------------------------------
 r = client.post("/preview", json={"skip_cols": 3})
@@ -469,5 +481,51 @@ for query, want in [("", 400), ("?column=Nope", 404)]:
     r = client.get("/api/values" + query)
     print("  %-16s -> %s" % (query or "(no column)", r.status_code))
     assert r.status_code == want, (query, r.status_code)
+
+# --- 17. the Excel export carries the table's theme ---------------------------
+print("\nthemed xlsx export:")
+up(path=SAMPLE)
+client.post("/process", json={})
+arrow = client.get("/api/data").data
+
+from openpyxl import load_workbook  # noqa: E402
+
+for primary, want_fill, want_font in [
+    # openpyxl stores a six-digit colour with a "00" alpha prefix; Excel treats
+    # the leading byte as opaque, so this is the value it writes and reads back.
+    ("#db0011", "00DB0011", "00FFFFFF"),   # corporate red -> white text
+    ("#0b5394", "000B5394", "00FFFFFF"),   # a dark colour -> white text
+    ("#ffe066", "00FFE066", "001A1A1A"),   # pale -> black text, automatically
+]:
+    r = client.post(
+        "/api/export/xlsx?primary=" + primary.replace("#", "%23"),
+        data=arrow,
+        content_type="application/vnd.apache.arrow.stream",
+    )
+    assert r.status_code == 200, r.get_json()
+    book = load_workbook(io.BytesIO(r.data))
+    sheet = book["View"]
+    head = sheet.cell(row=1, column=1)
+    print("  %-9s -> header fill %s, font %s, freeze %s"
+          % (primary, head.fill.start_color.rgb, head.font.color.rgb,
+             sheet.freeze_panes))
+    assert head.fill.start_color.rgb == want_fill, head.fill.start_color.rgb
+    assert head.font.color.rgb == want_font, head.font.color.rgb
+    assert sheet.freeze_panes == "A2", sheet.freeze_panes
+    assert head.value == sheet.cell(row=1, column=1).value
+    # The first data row must be intact, and banding must be present.
+    assert sheet.cell(row=2, column=1).value is not None
+    banded = sheet.cell(row=3, column=1).fill.start_color.rgb
+    print("      banded row fill: %s" % banded)
+    assert banded != "00000000", banded
+
+# A junk colour must fall back rather than crash.
+r = client.post("/api/export/xlsx?primary=nonsense", data=arrow,
+                content_type="application/vnd.apache.arrow.stream")
+assert r.status_code == 200, r.get_json()
+book = load_workbook(io.BytesIO(r.data))
+print("  junk colour -> header fill %s (fell back)"
+      % book["View"].cell(row=1, column=1).fill.start_color.rgb)
+assert book["View"].cell(row=1, column=1).fill.start_color.rgb == "00DB0011"
 
 print("\nALL BACKEND TESTS PASSED")

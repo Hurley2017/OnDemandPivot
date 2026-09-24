@@ -522,7 +522,7 @@ code {
     align-items: baseline;
     gap: 6px;
     min-width: 0;
-    padding: 6px 11px;
+    padding: 3px 10px;
 }
 
 .wb-item:first-child {
@@ -541,7 +541,7 @@ code {
 
 .wb-key {
     flex: 0 0 auto;
-    font-size: 9px;
+    font-size: 8.5px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.09em;
@@ -549,10 +549,10 @@ code {
 }
 
 .wb-file {
-    font-size: 12px;
+    font-size: 11.5px;
     font-weight: 600;
     color: var(--black);
-    max-width: 260px;
+    max-width: 240px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -2893,6 +2893,55 @@ perspective-viewer [theme] {
 
 .shelf + .shelf {
     margin-top: 12px;
+}
+
+/* ---- shelves, as Excel's four areas ---- */
+
+/* Excel arranges them Filters | Columns over Rows | Values. Two columns of
+   cards keeps every drop target visible at once instead of stacking four tall
+   boxes down the pane. */
+.pane-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+.pane-card {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.pane-card-head {
+    font-size: 9.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: var(--grey-600);
+}
+
+.pane-card .shelf-drop {
+    flex: 1 1 auto;
+    min-height: 56px;
+    gap: 4px;
+    padding: 5px;
+}
+
+.pane-card .shelf-chip {
+    padding: 3px 5px 3px 8px;
+    font-size: 11.5px;
+    gap: 4px;
+}
+
+.pane-card .shelf-chip select {
+    max-width: 66px;
+    font-size: 10.5px;
+}
+
+.pane-card .shelf-empty {
+    font-size: 10.5px;
+    padding: 2px;
 }
 
 .shelf-head {

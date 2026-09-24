@@ -1324,9 +1324,10 @@ tbody th span.rt-tree-group {
 }
 
 /* The plugin leaves a 12px inset on its scroll surface, which reads as dead
-   space between the caption and the first row. */
+   space between the caption and the first row. A hairline is wanted, not
+   nothing, so the header does not sit flush against the caption. */
 regular-table {
-    margin: 0 !important;
+    margin: 0.1rem 0 0 0 !important;
 }
 
 /* v5 shows an inline-edit row under the headers. This app is read-only, so the
@@ -2059,6 +2060,10 @@ async function downloadTable() {
 
     const cells = rows * Math.max(1, cols);
     const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+    // The workbook carries the table's colours, so a download looks like what
+    // was on screen.
+    const primary = (state.palette || PALETTES[0].colors)[0] || "#db0011";
+    const themeQuery = `?primary=${encodeURIComponent(primary)}`;
 
     if (cells > EXCEL_CELL_BUDGET) {
         // v5 can serialise the current view to CSV itself, which avoids posting
@@ -2093,7 +2098,7 @@ async function downloadTable() {
         return;
     }
 
-    const resp = await fetch("/api/export/xlsx", {
+    const resp = await fetch("/api/export/xlsx" + themeQuery, {
         method: "POST",
         headers: { "Content-Type": "application/vnd.apache.arrow.stream" },
         body: arrow,
@@ -2494,6 +2499,9 @@ async function main() {
         buildToolbar();
         initFields();
         initResizer();
+        // The fields pane is where the report is built, so it starts open —
+        // the same way Excel's PivotTable Fields does.
+        $("fieldsBtn").click();
         await renderViewSelect();
         await loadPerspective();
         renderFieldList();

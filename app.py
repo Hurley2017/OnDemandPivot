@@ -57,6 +57,89 @@ PREVIEW_COLS = 60   # display cap only; the dashboard always gets every column
 # Above this many cells a .xlsx export is swapped for CSV (see /api/export/*).
 EXCEL_CELL_BUDGET = 500_000
 
+# Banding every other row means a styled cell object for half the sheet, which
+# costs real time. Above this many cells the workbook keeps the themed header
+# (one row) and drops the banding.
+EXCEL_BANDING_BUDGET = 120_000
+
+# What the exported workbook looks like when the caller names no colour.
+EXCEL_DEFAULT_PRIMARY = "#db0011"
+
+
+def _excel_theme(primary):
+    """
+    Colours for the exported sheet, derived from the dashboard's palette.
+
+    The header takes the palette's primary and its text flips to black when that
+    colour is too pale to carry white — the same rule the on-screen grid uses, so
+    the workbook and the dashboard agree.
+    """
+    raw = (primary or "").strip()
+    if not re.fullmatch(r"#?[0-9a-fA-F]{6}", raw or ""):
+        raw = EXCEL_DEFAULT_PRIMARY
+    primary = raw if raw.startswith("#") else "#" + raw
+    hex_only = primary.lstrip("#").upper()
+
+    r, g, b = (int(hex_only[i:i + 2], 16) / 255 for i in (0, 2, 4))
+
+    def linear(channel):
+        return channel / 12.92 if channel <= 0.03928 else (
+            ((channel + 0.055) / 1.055) ** 2.4
+        )
+
+    luminance = 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b)
+    on_primary = "1A1A1A" if luminance > 0.45 else "FFFFFF"
+
+    def tint(channel, amount):
+        return round((channel + (1 - channel) * amount) * 255)
+
+    zebra = "".join(f"{tint(c, 0.955):02X}" for c in (r, g, b))
+    return {"primary": hex_only, "on_primary": on_primary, "zebra": zebra}
+
+
+def _write_themed_sheet(sheet, frame, theme):
+    """Write the frame with the dashboard's header colour and row banding."""
+    from openpyxl.cell import WriteOnlyCell
+    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.utils import get_column_letter
+
+    header_font = Font(bold=True, color=theme["on_primary"], size=10)
+    header_fill = PatternFill("solid", fgColor=theme["primary"])
+    header_align = Alignment(horizontal="left", vertical="center")
+
+    head = []
+    for name in frame.columns:
+        cell = WriteOnlyCell(sheet, value=str(name))
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = header_align
+        head.append(cell)
+    sheet.append(head)
+
+    cells_total = len(frame) * max(1, frame.shape[1])
+    band = cells_total <= EXCEL_BANDING_BUDGET
+    zebra_fill = PatternFill("solid", fgColor=theme["zebra"]) if band else None
+
+    for index, row in enumerate(frame.itertuples(index=False, name=None)):
+        values = list(row)
+        if band and index % 2 == 1:
+            cells = []
+            for value in values:
+                cell = WriteOnlyCell(sheet, value=value)
+                cell.fill = zebra_fill
+                cells.append(cell)
+            sheet.append(cells)
+        else:
+            sheet.append(values)
+
+    # Widths guessed from the header, so the sheet opens readable.
+    for position, name in enumerate(frame.columns, start=1):
+        letter = get_column_letter(position)
+        sheet.column_dimensions[letter].width = min(
+            42, max(11, len(str(name)) + 3)
+        )
+
+
 app = Flask(
     __name__,
     template_folder=TEMPLATE_DIR,
@@ -481,6 +564,22 @@ _NUMERIC_PLACEHOLDERS = {
 # the figures, so a strict cut-off leaves obviously numeric columns as text.
 # Anything that does not parse becomes a null rather than being mangled.
 _NUMERIC_COERCE_THRESHOLD = 0.8
+
+
+def _case_variant_examples(series: pd.Series, folded: pd.Series) -> str:
+    """
+    Name up to two real collisions so the warning shows what it means.
+
+    'CANADA' and 'Canada' teach the reader far more than "6 value(s)" does.
+    """
+    pairs = []
+    for key, group in series.groupby(folded):
+        variants = list(dict.fromkeys(str(v) for v in group.dropna()))
+        if len(variants) > 1:
+            pairs.append(" vs ".join(repr(v) for v in variants[:2]))
+        if len(pairs) == 2:
+            break
+    return "; ".join(pairs)
 
 
 def _coerce_numeric_text(series: pd.Series) -> pd.Series:
@@ -913,9 +1012,12 @@ def _profile_column(name: str, series: pd.Series, n_rows: int) -> dict:
             raw_unique = int(as_str.nunique())
             folded_unique = int(folded.nunique())
             if raw_unique > 1 and 0 < folded_unique < raw_unique:
+                examples = _case_variant_examples(as_str, folded)
                 anomalies.append(
                     f"{raw_unique - folded_unique} value(s) differ only by "
-                    f"case/spacing - they will group separately"
+                    f"case or spacing and become separate groups"
+                    + (f" (e.g. {examples})" if examples else "")
+                    + " — fix with Values → Text case"
                 )
 
     if re.match(r"^Unnamed:\s*\d+$", str(name)):
@@ -1601,12 +1703,14 @@ def api_export_xlsx():
     try:
         # openpyxl's write-only mode streams rows straight to the file instead
         # of building a cell object graph - the difference is minutes versus
-        # seconds on a large view.
+        # seconds on a large view. Styling has to use WriteOnlyCell, because a
+        # plain Cell is not accepted on that path.
         book = Workbook(write_only=True)
         sheet = book.create_sheet("View")
-        sheet.append([str(c) for c in frame.columns])
-        for row in frame.itertuples(index=False, name=None):
-            sheet.append(list(row))
+        sheet.freeze_panes = "A2"
+
+        theme = _excel_theme(request.args.get("primary"))
+        _write_themed_sheet(sheet, frame, theme)
         book.save(buffer)
     except Exception as exc:  # noqa: BLE001
         return _err(f"Could not build the workbook: {exc}", 500)

@@ -211,33 +211,35 @@
                 <div class="field-list" id="fieldList"></div>
             </div>
 
-            <div class="fields-section">
-                <div class="shelf">
-                    <div class="shelf-head">Rows</div>
-                    <div class="shelf-drop" id="shelfGroup" data-shelf="group">
-                        <span class="shelf-empty">Drag fields here to build rows</span>
-                    </div>
-                </div>
-
-                <div class="shelf">
-                    <div class="shelf-head">Columns</div>
-                    <div class="shelf-drop" id="shelfSplit" data-shelf="split">
-                        <span class="shelf-empty">Drag fields here to build columns</span>
-                    </div>
-                </div>
-
-                <div class="shelf">
-                    <div class="shelf-head">Values</div>
-                    <div class="shelf-drop" id="shelfValues" data-shelf="values">
-                        <span class="shelf-empty">Drag measures here to summarise</span>
-                    </div>
-                </div>
-
-                <div class="shelf">
-                    <div class="shelf-head">Filters</div>
+            <!-- Excel's four areas, in Excel's arrangement: Filters and Columns
+                 on the top row, Rows and Values beneath. -->
+            <div class="pane-grid">
+                <div class="pane-card">
+                    <div class="pane-card-head">Filters</div>
                     <div class="shelf-drop shelf-drop-inline" id="shelfFilters"
                          data-shelf="filters">
-                        <span class="shelf-empty">Drag fields here to filter</span>
+                        <span class="shelf-empty">Drop fields here</span>
+                    </div>
+                </div>
+
+                <div class="pane-card">
+                    <div class="pane-card-head">Columns</div>
+                    <div class="shelf-drop" id="shelfSplit" data-shelf="split">
+                        <span class="shelf-empty">Drop fields here</span>
+                    </div>
+                </div>
+
+                <div class="pane-card">
+                    <div class="pane-card-head">Rows</div>
+                    <div class="shelf-drop" id="shelfGroup" data-shelf="group">
+                        <span class="shelf-empty">Drop fields here</span>
+                    </div>
+                </div>
+
+                <div class="pane-card">
+                    <div class="pane-card-head">Values</div>
+                    <div class="shelf-drop" id="shelfValues" data-shelf="values">
+                        <span class="shelf-empty">Drop measures here</span>
                     </div>
                 </div>
             </div>
