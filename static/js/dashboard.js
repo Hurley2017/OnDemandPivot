@@ -48,6 +48,11 @@ const state = {
     // show a total column, so that one stays flat until asked for.
     grandTotals: "rollup",
     columnSubtotals: "flat",
+    // Presentation-only options, applied to the grid's injected theme.
+    bandedRows: true,
+    comfortableRows: true,
+    nameRowHeader: false,
+    nullDash: true,
     fields: [],        // [{name, kind, ...}] from /api/kpis
     schema: [],        // raw column names in frame order
     numeric: [],       // subset of schema
@@ -328,15 +333,26 @@ function renderFieldList() {
     }
 
     matches.forEach((name) => {
-        const chip = document.createElement("button");
-        chip.type = "button";
-        chip.className = "field-chip" + (used.has(name) ? " is-used" : "");
-        chip.draggable = true;
-        chip.dataset.column = name;
+        const row = document.createElement("button");
+        row.type = "button";
+        row.className = "field-row" + (used.has(name) ? " is-used" : "");
+        row.draggable = true;
+        row.dataset.column = name;
 
         const label = document.createElement("span");
+        label.className = "name";
         label.textContent = name;
-        chip.appendChild(label);
+        label.title = name;
+        row.appendChild(label);
+
+        // A field that is sorted says so, and how.
+        const sort = state.sort.find((s) => s[0] === name);
+        if (sort) {
+            const tag = document.createElement("span");
+            tag.className = "sort-tag";
+            tag.textContent = sort[1] === "desc" ? "Z→A" : "A→Z";
+            row.appendChild(tag);
+        }
 
         const kind = document.createElement("span");
         const k = state.numeric.includes(name)
@@ -344,24 +360,45 @@ function renderFieldList() {
             : state.dates && state.dates.includes(name) ? "datetime" : "string";
         kind.className = "kind " + k;
         kind.textContent = k === "number" ? "num" : k === "datetime" ? "date" : "text";
-        chip.appendChild(kind);
+        row.appendChild(kind);
 
-        chip.addEventListener("dragstart", (e) => {
+        row.addEventListener("dragstart", (e) => {
             e.dataTransfer.setData("text/plain", name);
             e.dataTransfer.effectAllowed = "copy";
-            chip.classList.add("dragging");
+            row.classList.add("dragging");
         });
-        chip.addEventListener("dragend", () => chip.classList.remove("dragging"));
+        row.addEventListener("dragend", () => row.classList.remove("dragging"));
         // Double-click sends it to the first shelf that will take it.
-        chip.addEventListener("dblclick", () => {
+        row.addEventListener("dblclick", () => {
             const shelf = ["group", "values", "split"].find((s) =>
                 shelfAccepts(s, name)
             );
             if (shelf) addToShelf(shelf, name);
         });
+        // A single click cycles the sort: ascending, descending, off.
+        row.addEventListener("click", () => cycleSort(name));
 
-        list.appendChild(chip);
+        list.appendChild(row);
     });
+}
+
+/**
+ * Cycle a column's sort: ascending -> descending -> unsorted.
+ *
+ * This replaces the old Sort panel. Sorting is a property of a column, so it is
+ * set from the column rather than from a separate list that has to be kept in
+ * step with it.
+ */
+function cycleSort(column) {
+    const index = state.sort.findIndex((s) => s[0] === column);
+    if (index < 0) {
+        state.sort = [[column, "asc"]];
+    } else if (state.sort[index][1] === "asc") {
+        state.sort = [[column, "desc"]];
+    } else {
+        state.sort = [];
+    }
+    refreshView();
 }
 
 function renderShelves() {
@@ -473,74 +510,69 @@ function clearValueCache() {
     valueCache.clear();
 }
 
-/** Human text for one filter condition. */
+/**
+ * The Filters area *is* the condition list.
+ *
+ * Dropping a field on it and editing a condition are the same thing, so they
+ * live in one window rather than a chip box that has to be kept in step with a
+ * separate list below it.
+ */
 function renderRules() {
-    const filterList = $("filterList");
-    const sortList = $("sortList");
-    if (!filterList || !sortList) return;
-
-    filterList.textContent = "";
-    if (!state.filter.length) {
-        const empty = document.createElement("div");
-        empty.className = "rule-empty";
-        empty.textContent = "No filters — every row is included.";
-        filterList.appendChild(empty);
-    } else {
-        state.filter.forEach((cond, i) => {
-            filterList.appendChild(buildFilterRow(cond, i));
-        });
-    }
-
-    sortList.textContent = "";
-    if (!state.sort.length) {
-        const empty = document.createElement("div");
-        empty.className = "rule-empty";
-        empty.textContent = "No sort — rows keep their natural order.";
-        sortList.appendChild(empty);
-    } else {
-        state.sort.forEach((spec, i) => {
-            sortList.appendChild(buildSortRow(spec, i));
-        });
-    }
-
-    renderFilterShelf();
-}
-
-/** The Filters drop zone mirrors the active conditions as removable chips. */
-function renderFilterShelf() {
     const el = $("shelfFilters");
+    const sortList = $("sortList");
+    if (sortList) renderSortSummary(sortList);
     if (!el) return;
-    el.textContent = "";
 
+    el.textContent = "";
     if (!state.filter.length) {
         const empty = document.createElement("span");
         empty.className = "shelf-empty";
-        empty.textContent = "Drag fields here to filter";
+        empty.textContent = "Drop fields here, then pick a value";
         el.appendChild(empty);
         return;
     }
 
     state.filter.forEach((cond, index) => {
-        const chip = document.createElement("div");
-        chip.className = "shelf-chip";
+        el.appendChild(buildFilterRow(cond, index));
+    });
+}
+
+/** Sort is set from the field list; this only reports what is applied. */
+function renderSortSummary(host) {
+    host.textContent = "";
+    if (!state.sort.length) {
+        const empty = document.createElement("div");
+        empty.className = "rule-empty";
+        empty.textContent = "Not sorted — click a column on the left.";
+        host.appendChild(empty);
+        return;
+    }
+    state.sort.forEach(([column, direction]) => {
+        const row = document.createElement("div");
+        row.className = "rule-row rule-row-readonly";
 
         const label = document.createElement("span");
-        label.className = "name";
-        label.textContent = cond[0];
-        label.title = cond[0];
-        chip.appendChild(label);
+        label.className = "rule-label";
+        label.textContent = column;
+        label.title = column;
+        row.appendChild(label);
+
+        const dir = document.createElement("span");
+        dir.className = "rule-dir";
+        dir.textContent = direction === "desc" ? "Descending" : "Ascending";
+        row.appendChild(dir);
 
         const drop = document.createElement("button");
         drop.type = "button";
         drop.className = "drop";
         drop.textContent = "\u00d7";
-        drop.setAttribute("aria-label", `Remove the filter on ${cond[0]}`);
+        drop.setAttribute("aria-label", `Clear the sort on ${column}`);
         drop.addEventListener("click", () => {
-            state.filter.splice(index, 1);
+            state.sort = state.sort.filter((s) => s[0] !== column);
             refreshView();
         });
-        chip.appendChild(drop);
-        el.appendChild(chip);
+        row.appendChild(drop);
+        host.appendChild(row);
     });
 }
 
@@ -655,51 +687,25 @@ function buildFilterRow(cond, index) {
     return row;
 }
 
-function buildSortRow(spec, index) {
-    const row = document.createElement("div");
-    row.className = "rule-row";
-
-    const column = document.createElement("select");
-    state.schema.forEach((name) => {
-        const opt = document.createElement("option");
-        opt.value = name;
-        opt.textContent = name;
-        column.appendChild(opt);
-    });
-    column.value = spec[0];
-    row.appendChild(column);
-
-    const dir = document.createElement("select");
-    [["asc", "Ascending"], ["desc", "Descending"]].forEach(([value, text]) => {
-        const opt = document.createElement("option");
-        opt.value = value;
-        opt.textContent = text;
-        dir.appendChild(opt);
-    });
-    dir.value = spec[1] || "asc";
-    row.appendChild(dir);
-
-    const commit = () => {
-        state.sort[index] = [column.value, dir.value];
-        refreshView();
-    };
-    column.addEventListener("change", commit);
-    dir.addEventListener("change", commit);
-
-    const drop = document.createElement("button");
-    drop.type = "button";
-    drop.className = "drop";
-    drop.textContent = "\u00d7";
-    drop.setAttribute("aria-label", "Remove sort");
-    drop.addEventListener("click", () => {
-        state.sort.splice(index, 1);
-        refreshView();
-    });
-    row.appendChild(drop);
-    return row;
-}
-
 /* ---- shelf mutations ---- */
+
+/**
+ * Add or remove a filter condition for a field.
+ *
+ * The new row is painted before the view is refreshed, so it is on screen even
+ * if the viewer rejects the config — a draft has no value yet and therefore
+ * filters nothing, which is exactly Excel's "(All)".
+ */
+function toggleFilter(column) {
+    const index = state.filter.findIndex((c) => c[0] === column);
+    if (index >= 0) {
+        state.filter.splice(index, 1);
+    } else {
+        state.filter.push([column, "==", ""]);
+    }
+    renderRules();
+    refreshView();
+}
 
 function addToShelf(shelf, column) {
     const key = shelf === "values" ? "columns" : shelf === "group" ? "groupBy" : "splitBy";
@@ -712,8 +718,7 @@ function addToShelf(shelf, column) {
     refreshView();
 }
 
-function removeFromShelf(shelf, column) {
-    const key = shelf === "values" ? "columns" : shelf === "group" ? "groupBy" : "splitBy";
+function removeFromShelf(shelf, column) {    const key = shelf === "values" ? "columns" : shelf === "group" ? "groupBy" : "splitBy";
     state[key] = state[key].filter((c) => c !== column);
     if (shelf === "values") pruneAggregates();
     refreshView();
@@ -865,15 +870,6 @@ function initFields() {
 
     $("fieldSearch").addEventListener("input", renderFieldList);
 
-    $("addFilter").addEventListener("click", () => {
-        state.filter.push([state.schema[0], "==", ""]);
-        refreshView();
-    });
-    $("addSort").addEventListener("click", () => {
-        state.sort.push([state.groupBy[0] || state.schema[0], "asc"]);
-        refreshView();
-    });
-
     // Report options map straight onto Perspective's rollup modes: with totals
     // the grouped axis keeps its "Total" rows, without them it is flat.
     const wireTotals = (id, key) => {
@@ -887,9 +883,57 @@ function initFields() {
     wireTotals("optGrandTotals", "grandTotals");
     wireTotals("optRowTotals", "columnSubtotals");
 
-    // Every shelf is a drop target; dropping onto a chip inserts before it.
-    [["shelfGroup", "group"], ["shelfSplit", "split"],
-     ["shelfValues", "values"], ["shelfFilters", "filters"]]
+    // The rest are presentation-only, so they restyle the grid in place rather
+    // than rebuilding the view.
+    const wireFlag = (id, key, after) => {
+        const box = $(id);
+        if (!box) return;
+        box.addEventListener("change", () => {
+            state[key] = box.checked;
+            if (after) after();
+            styleSurfaces();
+        });
+    };
+    // Banding lives in the view config (zebra_rows), so it needs a re-apply;
+    // the others are pure CSS and only need the theme rewritten.
+    const banded = $("optBanded");
+    if (banded) {
+        banded.addEventListener("change", () => {
+            state.bandedRows = banded.checked;
+            refreshView();
+        });
+    }
+    wireFlag("optComfortable", "comfortableRows");
+    wireFlag("optHeaderNames", "nameRowHeader");
+    wireFlag("optNullDash", "nullDash");
+
+    // The Filters window is a drop target in its own right: a field dropped
+    // there becomes a condition, so there is one place to look rather than a
+    // chip box mirroring a list kept elsewhere.
+    const filtersEl = $("shelfFilters");
+    if (filtersEl) {
+        filtersEl.addEventListener("dragover", (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "copy";
+            filtersEl.classList.add("is-over");
+        });
+        filtersEl.addEventListener("dragleave", (e) => {
+            if (!filtersEl.contains(e.relatedTarget)) {
+                filtersEl.classList.remove("is-over");
+            }
+        });
+        filtersEl.addEventListener("drop", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            filtersEl.classList.remove("is-over");
+            const column = e.dataTransfer.getData("text/plain");
+            if (!column || !state.schema.includes(column)) return;
+            toggleFilter(column);
+        });
+    }
+
+    // Every other shelf is a drop target; dropping onto a chip inserts before it.
+    [["shelfGroup", "group"], ["shelfSplit", "split"], ["shelfValues", "values"]]
         .forEach(([id, shelf]) => {
             const el = $(id);
             if (!el) return;
@@ -909,19 +953,6 @@ function initFields() {
                 el.classList.remove("is-over");
                 const column = e.dataTransfer.getData("text/plain");
                 if (!column || !state.schema.includes(column)) return;
-
-                // Filters are conditions, not an ordered list, so a drop simply
-                // adds one (or clears the existing one for that field).
-                if (shelf === "filters") {
-                    const existing = state.filter.findIndex((c) => c[0] === column);
-                    if (existing >= 0) {
-                        state.filter.splice(existing, 1);
-                    } else {
-                        state.filter.push([column, "==", ""]);
-                    }
-                    refreshView();
-                    return;
-                }
 
                 const chip = e.target.closest(".shelf-chip");
                 const index = chip ? Number(chip.dataset.index) : state[
@@ -1244,6 +1275,22 @@ function gridThemeCss(colors) {
     const rowHeader = mixHex(primary, "#ffffff", 0.975);
     const rowHeaderHover = mixHex(primary, "#ffffff", 0.945);
 
+    // Presentation options, set from the Report options checkboxes.
+    const zebraColour = state.bandedRows ? zebra : "transparent";
+    const rowHeight = state.comfortableRows ? "30px" : "22px";
+    const nullContent = state.nullDash ? '"-"' : '""';
+
+    // The row-header column has no caption of its own in a grouped view, so
+    // name it after the field it holds. Only when the user asks for it: a
+    // grouped grid otherwise reads as a bare column of labels.
+    const axis = state.groupBy || [];
+    const nameHeader =
+        state.nameRowHeader && axis.length
+            ? `regular-table thead th:first-child::after {
+    content: "${axis.join(" / ").replace(/"/g, "")}";
+}`
+            : "";
+
     return `
 /* ---- header: mirrors table.data thead th ---- */
 thead th {
@@ -1317,17 +1364,19 @@ tbody th span.rt-tree-group {
 
 /* Values the plugin reads when it paints. */
 :host {
-    --psp-datagrid--zebra--color: ${zebra};
-    --psp-datagrid--row--height: 30px;
+    --psp-datagrid--zebra--color: ${zebraColour};
+    --psp-datagrid--row--height: ${rowHeight};
     --psp-datagrid--border-color: #e2e2e2;
     --psp-datagrid--hover--border-color: #e2e2e2;
+    --psp-label--null--content: ${nullContent};
 }
 
+${nameHeader}
+
 /* The plugin leaves a 12px inset on its scroll surface, which reads as dead
-   space between the caption and the first row. A hairline is wanted, not
-   nothing, so the header does not sit flush against the caption. */
+   space. A comfortable gap is wanted, not none and not that much. */
 regular-table {
-    margin: 0.1rem 0 0 0 !important;
+    margin: 0.35rem 0 0 0 !important;
 }
 
 /* v5 shows an inline-edit row under the headers. This app is read-only, so the
@@ -1485,7 +1534,7 @@ function rawViewConfig(spec) {
             aggregates,
             // Zebra is a row *count*: 1 means every other row, matching what the
             // import page's preview table does with :nth-child(even).
-            plugin_config: { zebra_rows: 1 },
+            plugin_config: { zebra_rows: state.bandedRows ? 1 : 0 },
         };
     }
 

@@ -520,9 +520,9 @@ code {
 .wb-item {
     display: flex;
     align-items: baseline;
-    gap: 6px;
+    gap: 5px;
     min-width: 0;
-    padding: 3px 10px;
+    padding: 2px 9px;
 }
 
 .wb-item:first-child {
@@ -549,10 +549,10 @@ code {
 }
 
 .wb-file {
-    font-size: 11.5px;
+    font-size: 11px;
     font-weight: 600;
     color: var(--black);
-    max-width: 240px;
+    max-width: 220px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -566,14 +566,14 @@ code {
 
 .wb-select {
     font-family: var(--font);
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 600;
     color: var(--black);
     background: transparent;
     border: none;
     border-radius: 0;
-    padding: 0 18px 0 0;
-    max-width: 230px;
+    padding: 0 16px 0 0;
+    max-width: 190px;
     cursor: pointer;
 }
 
@@ -2789,9 +2789,14 @@ perspective-viewer [theme] {
 }
 
 .fields-section + .fields-section {
-    margin-top: 18px;
-    padding-top: 16px;
+    margin-top: 22px;
+    padding-top: 18px;
     border-top: 1px solid var(--grey-200);
+}
+
+/* Air between the field list and the four areas. */
+.pane-grid {
+    margin-top: 18px;
 }
 
 .fields-section-head {
@@ -2838,55 +2843,90 @@ perspective-viewer [theme] {
     border-color: var(--red);
 }
 
-/* ---- available columns ---- */
+/* ---- available columns: a vertical list, like Excel's field list ---- */
 
 .field-list {
     display: flex;
-    flex-wrap: wrap;
-    gap: 5px;
+    flex-direction: column;
+    gap: 1px;
+    max-height: 190px;
+    overflow-y: auto;
+    padding: 4px;
+    background: var(--grey-050);
+    border: 1px solid var(--grey-200);
+    border-radius: var(--radius);
 }
 
-.field-chip {
-    display: inline-flex;
+.field-row {
+    display: flex;
     align-items: center;
-    gap: 5px;
-    padding: 4px 9px;
-    font-size: 11.5px;
+    gap: 8px;
+    width: 100%;
+    padding: 5px 8px;
+    font-family: var(--font);
+    font-size: 12px;
+    text-align: left;
     color: var(--ink);
-    background: var(--grey-050);
-    border: 1px solid var(--grey-300);
-    border-radius: 12px;
+    background: transparent;
+    border: none;
+    border-radius: 3px;
     cursor: grab;
     user-select: none;
 }
 
-.field-chip:hover {
-    border-color: var(--black);
+.field-row:hover {
     background: var(--white);
+    box-shadow: var(--shadow-xs);
 }
 
-.field-chip.is-used {
+.field-row.is-used {
     opacity: 0.45;
 }
 
-.field-chip .kind {
-    font-size: 9px;
+.field-row .name {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.field-row .kind {
+    flex: 0 0 auto;
+    font-size: 8.5px;
     font-weight: 700;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--grey-400);
 }
 
-.field-chip .kind.number {
+.field-row .kind.number {
     color: var(--blue);
 }
 
-.field-chip .kind.datetime {
+.field-row .kind.datetime {
     color: var(--green);
 }
 
-.field-chip.dragging {
+/* The sort cycle reads out on the row itself. */
+.field-row .sort-tag {
+    flex: 0 0 auto;
+    font-size: 8.5px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--white);
+    background: var(--red);
+    border-radius: 8px;
+    padding: 1px 6px;
+}
+
+.field-row.dragging {
     opacity: 0.4;
+}
+
+.field-list .fields-hint {
+    margin: 6px 2px 0;
 }
 
 /* ---- shelves ---- */
@@ -2992,20 +3032,46 @@ perspective-viewer [theme] {
 }
 
 /* Report options. */
+/* The Filters area holds whole condition rows, so it grows rather than staying
+   a fixed-height chip box. */
+.shelf-drop-filters {
+    gap: 6px;
+    min-height: 56px;
+}
+
+.shelf-drop-filters .rule-row {
+    background: var(--white);
+    border-color: var(--grey-300);
+}
+
+/* Report options, two to a row. */
+.check-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px 10px;
+}
+
 .check-row {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 4px 0;
-    font-size: 12px;
+    gap: 7px;
+    padding: 3px 0;
+    font-size: 11.5px;
     color: var(--ink);
     cursor: pointer;
+    min-width: 0;
+}
+
+.check-row span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .check-row input {
     flex: 0 0 auto;
-    width: 14px;
-    height: 14px;
+    width: 13px;
+    height: 13px;
     accent-color: var(--red);
     cursor: pointer;
 }

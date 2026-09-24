@@ -209,6 +209,10 @@
                 <input class="fields-search" id="fieldSearch" type="search"
                        placeholder="Search columns" autocomplete="off">
                 <div class="field-list" id="fieldList"></div>
+                <p class="fields-hint">
+                    Drag a field onto an area below, or click it to cycle its
+                    sort.
+                </p>
             </div>
 
             <!-- Excel's four areas, in Excel's arrangement: Filters and Columns
@@ -216,7 +220,7 @@
             <div class="pane-grid">
                 <div class="pane-card">
                     <div class="pane-card-head">Filters</div>
-                    <div class="shelf-drop shelf-drop-inline" id="shelfFilters"
+                    <div class="shelf-drop shelf-drop-filters" id="shelfFilters"
                          data-shelf="filters">
                         <span class="shelf-empty">Drop fields here</span>
                     </div>
@@ -248,28 +252,38 @@
                 <div class="fields-section-head">
                     Report options
                 </div>
-                <label class="check-row">
-                    <input type="checkbox" id="optGrandTotals" checked>
-                    <span>Show grand totals (row totals)</span>
-                </label>
-                <label class="check-row">
-                    <input type="checkbox" id="optRowTotals">
-                    <span>Show a grand total column</span>
-                </label>
-            </div>
-
-            <div class="fields-section">
-                <div class="fields-section-head">
-                    Filter conditions
-                    <button class="mini-btn" id="addFilter" type="button">Add</button>
+                <div class="check-grid">
+                    <label class="check-row">
+                        <input type="checkbox" id="optGrandTotals" checked>
+                        <span>Row grand totals</span>
+                    </label>
+                    <label class="check-row">
+                        <input type="checkbox" id="optRowTotals">
+                        <span>Grand total column</span>
+                    </label>
+                    <label class="check-row">
+                        <input type="checkbox" id="optBanded" checked>
+                        <span>Banded rows</span>
+                    </label>
+                    <label class="check-row">
+                        <input type="checkbox" id="optComfortable" checked>
+                        <span>Comfortable rows</span>
+                    </label>
+                    <label class="check-row">
+                        <input type="checkbox" id="optHeaderNames">
+                        <span>Name the row-header column</span>
+                    </label>
+                    <label class="check-row">
+                        <input type="checkbox" id="optNullDash" checked>
+                        <span>Show blanks as “-”</span>
+                    </label>
                 </div>
-                <div class="rule-list" id="filterList"></div>
             </div>
 
             <div class="fields-section">
                 <div class="fields-section-head">
                     Sort
-                    <button class="mini-btn" id="addSort" type="button">Add</button>
+                    <span class="section-hint">click a column header in the table</span>
                 </div>
                 <div class="rule-list" id="sortList"></div>
             </div>
