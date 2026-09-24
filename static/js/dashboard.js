@@ -48,9 +48,8 @@ const state = {
     // show a total column, so that one stays flat until asked for.
     grandTotals: "rollup",
     columnSubtotals: "flat",
-    // Presentation-only options, applied to the grid's injected theme.
-    bandedRows: true,
-    comfortableRows: true,
+    // Presentation-only options, applied to the grid's injected theme. The
+    // table is always banded, so that is not a choice.
     nameRowHeader: false,
     nullDash: true,
     fields: [],        // [{name, kind, ...}] from /api/kpis
@@ -221,7 +220,7 @@ function markActiveView() {
     const dl = $("downloadBtn");
     if (dl) {
         dl.textContent =
-            state.plugin === "Datagrid" ? "Download table" : "Download PNG";
+            state.plugin === "Datagrid" ? "Download table" : "Download Chart";
     }
 }
 
@@ -335,7 +334,7 @@ function renderFieldList() {
     matches.forEach((name) => {
         const row = document.createElement("button");
         row.type = "button";
-        row.className = "field-row" + (used.has(name) ? " is-used" : "");
+        row.className = "field-pill" + (used.has(name) ? " is-used" : "");
         row.draggable = true;
         row.dataset.column = name;
 
@@ -519,8 +518,6 @@ function clearValueCache() {
  */
 function renderRules() {
     const el = $("shelfFilters");
-    const sortList = $("sortList");
-    if (sortList) renderSortSummary(sortList);
     if (!el) return;
 
     el.textContent = "";
@@ -537,44 +534,7 @@ function renderRules() {
     });
 }
 
-/** Sort is set from the field list; this only reports what is applied. */
-function renderSortSummary(host) {
-    host.textContent = "";
-    if (!state.sort.length) {
-        const empty = document.createElement("div");
-        empty.className = "rule-empty";
-        empty.textContent = "Not sorted — click a column on the left.";
-        host.appendChild(empty);
-        return;
-    }
-    state.sort.forEach(([column, direction]) => {
-        const row = document.createElement("div");
-        row.className = "rule-row rule-row-readonly";
-
-        const label = document.createElement("span");
-        label.className = "rule-label";
-        label.textContent = column;
-        label.title = column;
-        row.appendChild(label);
-
-        const dir = document.createElement("span");
-        dir.className = "rule-dir";
-        dir.textContent = direction === "desc" ? "Descending" : "Ascending";
-        row.appendChild(dir);
-
-        const drop = document.createElement("button");
-        drop.type = "button";
-        drop.className = "drop";
-        drop.textContent = "\u00d7";
-        drop.setAttribute("aria-label", `Clear the sort on ${column}`);
-        drop.addEventListener("click", () => {
-            state.sort = state.sort.filter((s) => s[0] !== column);
-            refreshView();
-        });
-        row.appendChild(drop);
-        host.appendChild(row);
-    });
-}
+/** Sort is cycled from the field pills and from the table's own headers. */
 
 function buildFilterRow(cond, index) {
     const row = document.createElement("div");
@@ -667,11 +627,13 @@ function buildFilterRow(cond, index) {
     column.addEventListener("change", () => {
         // A new field means a new value list and a clean condition.
         state.filter[index] = [column.value, op.value, ""];
+        renderRules();
         refreshView();
     });
     op.addEventListener("change", () => {
         state.filter[index] = [column.value, op.value, cond[2]];
         renderRules();
+        refreshView();
     });
 
     const drop = document.createElement("button");
@@ -681,6 +643,9 @@ function buildFilterRow(cond, index) {
     drop.setAttribute("aria-label", "Remove filter");
     drop.addEventListener("click", () => {
         state.filter.splice(index, 1);
+        // Repaint first: removing a draft changes nothing the viewer applies,
+        // so no config event would come back to trigger a re-render.
+        renderRules();
         refreshView();
     });
     row.appendChild(drop);
@@ -885,25 +850,14 @@ function initFields() {
 
     // The rest are presentation-only, so they restyle the grid in place rather
     // than rebuilding the view.
-    const wireFlag = (id, key, after) => {
+    const wireFlag = (id, key) => {
         const box = $(id);
         if (!box) return;
         box.addEventListener("change", () => {
             state[key] = box.checked;
-            if (after) after();
             styleSurfaces();
         });
     };
-    // Banding lives in the view config (zebra_rows), so it needs a re-apply;
-    // the others are pure CSS and only need the theme rewritten.
-    const banded = $("optBanded");
-    if (banded) {
-        banded.addEventListener("change", () => {
-            state.bandedRows = banded.checked;
-            refreshView();
-        });
-    }
-    wireFlag("optComfortable", "comfortableRows");
     wireFlag("optHeaderNames", "nameRowHeader");
     wireFlag("optNullDash", "nullDash");
 
@@ -984,6 +938,7 @@ function initPalette() {
     const presets = $("palettePresets");
     const primary = $("palettePrimary");
     const secondary = $("paletteSecondary");
+    const tertiary = $("paletteTertiary");
 
     presets.innerHTML = PALETTES.map(
         (p, i) => `
@@ -1011,6 +966,7 @@ function initPalette() {
         savePalette(colors);
         primary.value = colors[0];
         secondary.value = colors[1];
+        if (tertiary) tertiary.value = colors[2] || colors[0];
         paintViewer($("viewer"), colors);
         mark();
 
@@ -1045,10 +1001,12 @@ function initPalette() {
         const colors = state.palette.slice();
         colors[0] = primary.value;
         colors[1] = secondary.value;
+        if (tertiary) colors[2] = tertiary.value;
         apply(colors);
     };
     primary.addEventListener("change", applyCustom);
     secondary.addEventListener("change", applyCustom);
+    if (tertiary) tertiary.addEventListener("change", applyCustom);
 
     const close = () => {
         panel.hidden = true;
@@ -1066,6 +1024,7 @@ function initPalette() {
 
     primary.value = state.palette[0];
     secondary.value = state.palette[1];
+    if (tertiary) tertiary.value = state.palette[2] || state.palette[0];
     mark();
 }
 
@@ -1275,20 +1234,24 @@ function gridThemeCss(colors) {
     const rowHeader = mixHex(primary, "#ffffff", 0.975);
     const rowHeaderHover = mixHex(primary, "#ffffff", 0.945);
 
-    // Presentation options, set from the Report options checkboxes.
-    const zebraColour = state.bandedRows ? zebra : "transparent";
-    const rowHeight = state.comfortableRows ? "30px" : "22px";
+    // Presentation options, set from the Report options checkboxes. The table
+    // is always banded and always comfortable, so neither is a choice.
+    const zebraColour = zebra;
+    const rowHeight = "30px";
     const nullContent = state.nullDash ? '"-"' : '""';
 
-    // The row-header column has no caption of its own in a grouped view, so
-    // name it after the field it holds. Only when the user asks for it: a
-    // grouped grid otherwise reads as a bare column of labels.
+    // The row-header columns have no captions of their own in a grouped view.
+    // Each level is one `rt-col-N` header cell, so name them by position —
+    // naming only the first left the second level blank.
     const axis = state.groupBy || [];
     const nameHeader =
         state.nameRowHeader && axis.length
-            ? `regular-table thead th:first-child::after {
-    content: "${axis.join(" / ").replace(/"/g, "")}";
-}`
+            ? axis
+                  .map((name, level) =>
+                      `regular-table thead th.rt-col-${level}.rt-group-corner` +
+                      `::after { content: "${String(name).replace(/"/g, "")}"; }`
+                  )
+                  .join("\n")
             : "";
 
     return `
@@ -1533,8 +1496,9 @@ function rawViewConfig(spec) {
             sort: state.sort,
             aggregates,
             // Zebra is a row *count*: 1 means every other row, matching what the
-            // import page's preview table does with :nth-child(even).
-            plugin_config: { zebra_rows: state.bandedRows ? 1 : 0 },
+            // import page's preview table does with :nth-child(even). The table
+            // is always banded.
+            plugin_config: { zebra_rows: 1 },
         };
     }
 

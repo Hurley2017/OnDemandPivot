@@ -2096,14 +2096,16 @@ body.page-dashboard .site-header {
 
 .palette-custom {
     display: flex;
-    gap: 10px;
+    gap: 8px;
+    flex-wrap: wrap;
     margin-top: 12px;
     padding-top: 11px;
     border-top: 1px solid var(--grey-200);
 }
 
 .palette-custom label {
-    flex: 1;
+    flex: 1 1 60px;
+    min-width: 0;
     font-size: 9.5px;
     font-weight: 700;
     letter-spacing: 0.09em;
@@ -2843,56 +2845,49 @@ perspective-viewer [theme] {
     border-color: var(--red);
 }
 
-/* ---- available columns: a vertical list, like Excel's field list ---- */
+/* ---- available columns: pills that wrap, directly under the search box ---- */
 
 .field-list {
     display: flex;
-    flex-direction: column;
-    gap: 1px;
-    max-height: 190px;
-    overflow-y: auto;
-    padding: 4px;
-    background: var(--grey-050);
-    border: 1px solid var(--grey-200);
-    border-radius: var(--radius);
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-top: 8px;
 }
 
-.field-row {
-    display: flex;
+.field-pill {
+    display: inline-flex;
     align-items: center;
-    gap: 8px;
-    width: 100%;
-    padding: 5px 8px;
+    gap: 5px;
+    max-width: 100%;
+    padding: 4px 9px;
     font-family: var(--font);
-    font-size: 12px;
-    text-align: left;
+    font-size: 11.5px;
     color: var(--ink);
-    background: transparent;
-    border: none;
-    border-radius: 3px;
+    background: var(--white);
+    border: 1px solid var(--grey-300);
+    border-radius: 12px;
     cursor: grab;
     user-select: none;
+    transition: border-color 0.14s ease, box-shadow 0.14s ease;
 }
 
-.field-row:hover {
-    background: var(--white);
+.field-pill:hover {
+    border-color: var(--black);
     box-shadow: var(--shadow-xs);
 }
 
-.field-row.is-used {
+.field-pill.is-used {
     opacity: 0.45;
 }
 
-.field-row .name {
-    flex: 1 1 auto;
+.field-pill .name {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
-.field-row .kind {
-    flex: 0 0 auto;
+.field-pill .kind {
     font-size: 8.5px;
     font-weight: 700;
     letter-spacing: 0.06em;
@@ -2900,33 +2895,27 @@ perspective-viewer [theme] {
     color: var(--grey-400);
 }
 
-.field-row .kind.number {
+.field-pill .kind.number {
     color: var(--blue);
 }
 
-.field-row .kind.datetime {
+.field-pill .kind.datetime {
     color: var(--green);
 }
 
-/* The sort cycle reads out on the row itself. */
-.field-row .sort-tag {
-    flex: 0 0 auto;
+/* The sort cycle reads out on the pill itself. */
+.field-pill .sort-tag {
     font-size: 8.5px;
     font-weight: 700;
     letter-spacing: 0.05em;
-    text-transform: uppercase;
     color: var(--white);
     background: var(--red);
     border-radius: 8px;
-    padding: 1px 6px;
+    padding: 1px 5px;
 }
 
-.field-row.dragging {
+.field-pill.dragging {
     opacity: 0.4;
-}
-
-.field-list .fields-hint {
-    margin: 6px 2px 0;
 }
 
 /* ---- shelves ---- */
@@ -3033,15 +3022,33 @@ perspective-viewer [theme] {
 
 /* Report options. */
 /* The Filters area holds whole condition rows, so it grows rather than staying
-   a fixed-height chip box. */
+   a fixed-height chip box. The card is narrow, so a condition stacks instead of
+   squeezing its three controls onto one line. */
 .shelf-drop-filters {
     gap: 6px;
     min-height: 56px;
 }
 
 .shelf-drop-filters .rule-row {
+    flex-wrap: wrap;
+    gap: 4px;
     background: var(--white);
     border-color: var(--grey-300);
+    padding: 6px;
+}
+
+.shelf-drop-filters .rule-row select,
+.shelf-drop-filters .rule-value-host {
+    flex: 1 1 100%;
+    min-width: 0;
+}
+
+.shelf-drop-filters .rule-row .drop {
+    margin-left: auto;
+    order: -1;
+    align-self: flex-end;
+    padding: 0 4px;
+    height: 16px;
 }
 
 /* Report options, two to a row. */

@@ -121,9 +121,13 @@
                         Secondary
                         <input type="color" id="paletteSecondary" value="#1a1a1a">
                     </label>
+                    <label>
+                        Tertiary
+                        <input type="color" id="paletteTertiary" value="#666666">
+                    </label>
                 </div>
                 <p class="palette-note">
-                    Applies to every chart view and to the table's header and
+                    Three colours drive the charts and the table's header and
                     banding.
                 </p>
             </div>
@@ -157,8 +161,7 @@
         </button>
         <button class="btn btn-dark btn-sm" id="downloadBtn" type="button">
             Download
-        </button>
-    </div>
+        </button>    </div>
 </div>
 
 <main class="dash-layout" id="dashLayout">
@@ -210,8 +213,7 @@
                        placeholder="Search columns" autocomplete="off">
                 <div class="field-list" id="fieldList"></div>
                 <p class="fields-hint">
-                    Drag a field onto an area below, or click it to cycle its
-                    sort.
+                    Drag a pill onto an area below, or click it to cycle its sort.
                 </p>
             </div>
 
@@ -262,14 +264,6 @@
                         <span>Grand total column</span>
                     </label>
                     <label class="check-row">
-                        <input type="checkbox" id="optBanded" checked>
-                        <span>Banded rows</span>
-                    </label>
-                    <label class="check-row">
-                        <input type="checkbox" id="optComfortable" checked>
-                        <span>Comfortable rows</span>
-                    </label>
-                    <label class="check-row">
                         <input type="checkbox" id="optHeaderNames">
                         <span>Name the row-header column</span>
                     </label>
@@ -278,14 +272,6 @@
                         <span>Show blanks as “-”</span>
                     </label>
                 </div>
-            </div>
-
-            <div class="fields-section">
-                <div class="fields-section-head">
-                    Sort
-                    <span class="section-hint">click a column header in the table</span>
-                </div>
-                <div class="rule-list" id="sortList"></div>
             </div>
         </div>
     </aside>
