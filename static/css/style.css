@@ -506,24 +506,31 @@ code {
 }
 
 /* Workbook and worksheet read as one unit: which file, and which sheet inside
-   it. The worksheet half is a picker, so it carries the input styling. */
+   it. Laid out on one line so the header stays shallow — no `overflow: hidden`
+   here, because the worksheet picker's panel has to escape the block. */
 .wb-group {
     display: flex;
-    align-items: stretch;
+    align-items: center;
     gap: 0;
     background: var(--grey-050);
     border: 1px solid var(--grey-300);
     border-radius: var(--radius);
-    overflow: hidden;
 }
 
 .wb-item {
     display: flex;
-    flex-direction: column;
-    justify-content: center;
-    gap: 1px;
+    align-items: baseline;
+    gap: 6px;
     min-width: 0;
-    padding: 4px 11px;
+    padding: 6px 11px;
+}
+
+.wb-item:first-child {
+    border-radius: var(--radius) 0 0 var(--radius);
+}
+
+.wb-item:last-child {
+    border-radius: 0 var(--radius) var(--radius) 0;
 }
 
 /* Only the worksheet half gets a divider, so a single-sheet workbook shows one
@@ -533,6 +540,7 @@ code {
 }
 
 .wb-key {
+    flex: 0 0 auto;
     font-size: 9px;
     font-weight: 700;
     text-transform: uppercase;
@@ -544,10 +552,16 @@ code {
     font-size: 12px;
     font-weight: 600;
     color: var(--black);
-    max-width: 300px;
+    max-width: 260px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+/* The custom dropdown needs a positioned parent for its panel. */
+.wb-item .cselect {
+    position: relative;
+    min-width: 0;
 }
 
 .wb-select {
@@ -559,7 +573,7 @@ code {
     border: none;
     border-radius: 0;
     padding: 0 18px 0 0;
-    max-width: 240px;
+    max-width: 230px;
     cursor: pointer;
 }
 
@@ -3098,6 +3112,7 @@ perspective-viewer [theme] {
     flex: 1 1 auto;
     min-width: 0;
     margin-bottom: 0;
+    padding: 10px 0;
 }
 
 .group-bar-plain {
@@ -3109,24 +3124,129 @@ perspective-viewer [theme] {
     top: calc(100% + 6px);
 }
 
+/* ---- the assistant, as a command-bar action ---- */
+
+.ai-btn {
+    gap: 7px;
+}
+
+.ai-btn-icon {
+    width: 15px;
+    height: 15px;
+    flex: 0 0 auto;
+    color: var(--grey-500);
+    transition: color 0.16s ease;
+}
+
+.ai-btn:hover .ai-btn-icon,
+.ai-btn.is-live .ai-btn-icon {
+    color: var(--red);
+}
+
+.ai-btn .ai-state {
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--grey-600);
+    background: var(--grey-100);
+    border-radius: 9px;
+    padding: 2px 7px;
+    transition: background 0.18s ease, color 0.18s ease;
+}
+
+.ai-btn.is-live .ai-state {
+    color: var(--white);
+    background: var(--green);
+}
+
+.ai-btn[aria-expanded="true"] {
+    border-color: var(--red);
+    color: var(--red);
+}
+
+/* ---- resizing the side panes ---- */
+
+/* Widths live in custom properties so the drag handle only has to set two
+   numbers, and the grid re-lays out on its own. */
+.dash-layout {
+    --fields-w: 322px;
+    --chat-w: 384px;
+}
+
+/* The handle rides in its own hairline column; the gap around it is halved so
+   the panes sit the same distance apart as they did before. */
+.dash-layout.fields-open,
+.dash-layout.fields-open.chat-open {
+    gap: 8px;
+}
+
+.dash-resizer {
+    grid-column: 2;
+    width: 1px;
+    justify-self: center;
+    align-self: stretch;
+    position: relative;
+    cursor: col-resize;
+    background: transparent;
+}
+
+/* The visible line, plus a generous invisible hit area either side. */
+.dash-resizer::before,
+.dash-resizer::after {
+    content: "";
+    position: absolute;
+    border-radius: 2px;
+}
+
+.dash-resizer::before {
+    inset: 0;
+    background: var(--grey-200);
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+
+.dash-resizer::after {
+    inset: 0 -9px;
+}
+
+.dash-resizer:hover::before,
+.dash-resizer.is-dragging::before,
+.dash-resizer:focus-visible::before {
+    opacity: 1;
+    background: var(--red);
+}
+
+.dash-resizer:focus-visible {
+    outline: none;
+}
+
+/* While dragging, stop the panes from animating and the text from selecting. */
+body.is-resizing {
+    cursor: col-resize;
+    user-select: none;
+}
+
+body.is-resizing .dash-layout {
+    transition: none;
+}
+
+body.is-resizing .viewer-shell {
+    pointer-events: none;
+}
+
 /* The PivotTable Fields pane takes the right column, Excel-style; the AI dock
    takes a further column of its own. */
 .dash-layout.fields-open {
-    grid-template-columns: minmax(0, 1fr) 320px;
+    grid-template-columns: minmax(0, 1fr) 1px var(--fields-w);
 }
 
 .dash-layout.fields-open.chat-open {
-    grid-template-columns: minmax(0, 1fr) 320px 380px;
+    grid-template-columns: minmax(0, 1fr) 1px var(--fields-w) var(--chat-w);
 }
 
-@media (max-width: 1180px) {
-    .dash-layout.fields-open {
-        grid-template-columns: minmax(0, 1fr) 272px;
-    }
-
-    .dash-layout.fields-open.chat-open {
-        grid-template-columns: minmax(0, 1fr) 272px 340px;
-    }
+.dash-layout.chat-open {
+    grid-template-columns: minmax(0, 1fr) var(--chat-w);
 }
 
 @media (max-width: 1180px) {

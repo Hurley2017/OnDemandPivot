@@ -607,6 +607,108 @@ function moveToShelf(shelf, column, index) {
     refreshView();
 }
 
+/* ------------------------------------------------------- pane resizing */
+
+const FIELDS_WIDTH_KEY = "cpa.fields.width.v1";
+const FIELDS_WIDTH_DEFAULT = 322;
+const FIELDS_MIN = 236;
+const FIELDS_MAX = 640;
+/* The table never gets squeezed below this, however far the handle is dragged. */
+const TABLE_MIN = 420;
+
+/** Keep the pane usable and the table visible. */
+function clampFieldsWidth(px) {
+    const layout = $("dashLayout");
+    const room = layout ? layout.clientWidth : window.innerWidth;
+    const cap = Math.min(FIELDS_MAX, Math.max(FIELDS_MIN, room - TABLE_MIN));
+    return Math.round(Math.max(FIELDS_MIN, Math.min(cap, px)));
+}
+
+function fieldsWidthNow() {
+    const layout = $("dashLayout");
+    if (!layout) return FIELDS_WIDTH_DEFAULT;
+    const current = parseInt(
+        getComputedStyle(layout).getPropertyValue("--fields-w"), 10
+    );
+    return Number.isFinite(current) ? current : FIELDS_WIDTH_DEFAULT;
+}
+
+function setFieldsWidth(px, persist) {
+    const layout = $("dashLayout");
+    if (!layout) return;
+    const width = clampFieldsWidth(px);
+    layout.style.setProperty("--fields-w", `${width}px`);
+    if (!persist) return;
+    try {
+        localStorage.setItem(FIELDS_WIDTH_KEY, String(width));
+    } catch (_err) {
+        /* storage unavailable — the live width still works this session */
+    }
+}
+
+function loadFieldsWidth() {
+    try {
+        const raw = parseInt(localStorage.getItem(FIELDS_WIDTH_KEY) || "", 10);
+        if (Number.isFinite(raw)) return raw;
+    } catch (_err) {
+        /* fall through to the default */
+    }
+    return FIELDS_WIDTH_DEFAULT;
+}
+
+/**
+ * Horizontal resize between the table and the PivotTable Fields pane.
+ *
+ * The pane lives on the right, so dragging left widens it. Widths are written
+ * to `--fields-w` on the layout, which the grid columns read; the drag itself
+ * is on the window so the pointer can leave the 1px handle without dropping it.
+ */
+function initResizer() {
+    const handle = $("dashResizer");
+    const layout = $("dashLayout");
+    if (!handle || !layout) return;
+
+    setFieldsWidth(loadFieldsWidth(), false);
+
+    let startX = 0;
+    let startW = 0;
+
+    const onMove = (event) => {
+        setFieldsWidth(startW - (event.clientX - startX), false);
+    };
+
+    const onUp = () => {
+        handle.classList.remove("is-dragging");
+        document.body.classList.remove("is-resizing");
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+        setFieldsWidth(fieldsWidthNow(), true);
+    };
+
+    handle.addEventListener("pointerdown", (event) => {
+        event.preventDefault();
+        startX = event.clientX;
+        startW = fieldsWidthNow();
+        handle.classList.add("is-dragging");
+        document.body.classList.add("is-resizing");
+        window.addEventListener("pointermove", onMove);
+        window.addEventListener("pointerup", onUp);
+    });
+
+    // Keyboard equivalent, so the handle is not mouse-only.
+    handle.addEventListener("keydown", (event) => {
+        const step = event.shiftKey ? 40 : 12;
+        if (event.key === "ArrowLeft") setFieldsWidth(fieldsWidthNow() + step, true);
+        else if (event.key === "ArrowRight") setFieldsWidth(fieldsWidthNow() - step, true);
+        else if (event.key === "Home") setFieldsWidth(FIELDS_WIDTH_DEFAULT, true);
+        else return;
+        event.preventDefault();
+    });
+
+    // A narrower window must not leave the pane wider than the table can afford.
+    window.addEventListener("resize", () => setFieldsWidth(fieldsWidthNow(), false));
+}
+
 function initFields() {
     const dock = $("fieldsDock");
     const layout = $("dashLayout");
@@ -618,7 +720,13 @@ function initFields() {
         layout.classList.toggle("fields-open", open);
         btn.setAttribute("aria-expanded", open ? "true" : "false");
         btn.textContent = open ? "Hide Fields" : "Show Fields";
-        if (open) renderFieldList();
+        const handle = $("dashResizer");
+        if (handle) handle.hidden = !open;
+        if (open) {
+            // Re-clamp: the window may have changed size while it was closed.
+            setFieldsWidth(fieldsWidthNow(), false);
+            renderFieldList();
+        }
     };
 
     btn.addEventListener("click", () => setOpen(dock.hidden));
@@ -933,7 +1041,7 @@ function paintViewer(viewer, colors) {
 
     // The table follows the same palette, so the Colours picker themes the
     // whole workbench rather than just the charts.
-    styleGrid(colors, viewer);
+    styleSurfaces(colors, viewer);
 }
 
 /**
@@ -1002,12 +1110,51 @@ tbody tr:hover th {
     --psp-datagrid--hover--border-color: #e2e2e2;
 }
 
+/* The plugin leaves a 12px inset on its scroll surface, which reads as dead
+   space between the caption and the first row. */
+regular-table {
+    margin: 0 !important;
+}
+
 /* v5 shows an inline-edit row under the headers. This app is read-only, so the
    affordance is hidden rather than left as a row of inert EDIT buttons. */
 regular-table #psp-column-edit-buttons {
     display: none !important;
 }
 `;
+}
+
+/**
+ * Trim the dead space Perspective reserves above the plugin.
+ *
+ * The viewer's workspace frame keeps a 26px panel titlebar even with a single
+ * panel and no tab strip, plus a 4px margin and a 1px border on the frame
+ * itself — about 31px of empty space between our caption and the grid. The
+ * titlebar is exposed as `part="titlebar"`, so it can be hidden through the
+ * official hook rather than by reaching into an unmarked div.
+ */
+const VIEWER_SHELL_CSS = `
+regular-layout-frame {
+    margin: 0 !important;
+    border: 0 !important;
+}
+regular-layout-frame::part(titlebar) {
+    display: none !important;
+}
+`;
+
+function styleViewerShell(viewer) {
+    const host = viewer || $("viewer");
+    const root = host && host.shadowRoot;
+    if (!root) return;
+
+    let style = root.querySelector("style[data-hsbc-shell]");
+    if (!style) {
+        style = document.createElement("style");
+        style.setAttribute("data-hsbc-shell", "1");
+        root.appendChild(style);
+    }
+    style.textContent = VIEWER_SHELL_CSS;
 }
 
 /**
@@ -1029,6 +1176,12 @@ function styleGrid(colors, viewer) {
         root.appendChild(style);
     }
     style.textContent = gridThemeCss(colors || state.palette || PALETTES[0].colors);
+}
+
+/** Both rendering surfaces need restyling together. */
+function styleSurfaces(colors, viewer) {
+    styleViewerShell(viewer);
+    styleGrid(colors, viewer);
 }
 
 function loadPalette() {
@@ -1233,7 +1386,7 @@ function attachViewerEvents(viewer) {
         if (cfg.plugin) state.plugin = cfg.plugin;
         syncToolbarFromConfig(cfg);
         markActiveView();
-        styleGrid();
+        styleSurfaces();
     });
 }
 
@@ -1267,7 +1420,7 @@ async function rebuildViewer(restoreConfig) {
         table: TABLE_NAME,
     };
     await fresh.restore(next);
-    styleGrid();
+    styleSurfaces();
 
     state.config = next;
     state.plugin = next.plugin || "Datagrid";
@@ -1285,7 +1438,7 @@ async function applyConfig(next) {
     try {
         await $("viewer").restore(next);
         state.config = next;
-        styleGrid();
+        styleSurfaces();
         setStatus("Ready");
         return true;
     } catch (err) {
@@ -1603,7 +1756,7 @@ async function loadPerspective() {
 
     const initial = buildViewConfig(specFor("Datagrid"));
     await viewer.restore(initial);
-    styleGrid();
+    styleSurfaces();
     setStatus("Ready");
     state.ready = true;
 }
@@ -1946,9 +2099,11 @@ function initChat() {
     const setOpen = (open) => {
         dock.hidden = !open;
         layout.classList.toggle("chat-open", open);
-        // The floating button steps aside while the panel is open.
-        toggle.hidden = open;
+        // The button stays put and becomes the toggle, rather than stepping
+        // aside — it now lives in the command bar, not over the table.
         toggle.setAttribute("aria-expanded", open ? "true" : "false");
+        toggle.title = open ? "Close the AI Data Assistant"
+                            : "Open the AI Data Assistant";
         if (open) {
             setChatMode();
             input.focus();
@@ -2098,6 +2253,7 @@ async function main() {
         await loadKpis();
         buildToolbar();
         initFields();
+        initResizer();
         await renderViewSelect();
         await loadPerspective();
         renderFieldList();
