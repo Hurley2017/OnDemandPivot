@@ -42,6 +42,12 @@ const state = {
     filter: [],
     sort: [],
     aggregates: {},    // column -> Perspective aggregate name
+    // Perspective's rollup modes. "rollup" keeps the Total rows, "flat" hides
+    // them — the same choice Excel offers with Grand Totals. Grouped views
+    // already showed a Total row, so that default is preserved; splits did not
+    // show a total column, so that one stays flat until asked for.
+    grandTotals: "rollup",
+    columnSubtotals: "flat",
     fields: [],        // [{name, kind, ...}] from /api/kpis
     schema: [],        // raw column names in frame order
     numeric: [],       // subset of schema
@@ -93,6 +99,8 @@ const VIEW_CONFIG_KEYS = [
     "aggregates",
     "group_by_depth",
     "filter_op",
+    "group_rollup_mode",
+    "split_rollup_mode",
 ];
 
 /**
@@ -434,6 +442,37 @@ function renderShelves() {
     });
 }
 
+/* ---- distinct values, for Excel-style filter pickers ---- */
+
+const valueCache = new Map();
+
+/**
+ * Distinct values of a column, as the server sees them.
+ *
+ * Cached per column for the life of the page: the underlying frame only changes
+ * when a new file is uploaded, and that reloads the dashboard anyway.
+ */
+function distinctValues(column) {
+    if (!valueCache.has(column)) {
+        valueCache.set(
+            column,
+            fetch(`/api/values?column=${encodeURIComponent(column)}`)
+                .then((resp) => (resp.ok ? resp.json() : null))
+                .then((data) =>
+                    data && data.success
+                        ? data
+                        : { values: [], truncated: true, has_blanks: false }
+                )
+                .catch(() => ({ values: [], truncated: true, has_blanks: false }))
+        );
+    }
+    return valueCache.get(column);
+}
+
+function clearValueCache() {
+    valueCache.clear();
+}
+
 /** Human text for one filter condition. */
 function renderRules() {
     const filterList = $("filterList");
@@ -463,6 +502,46 @@ function renderRules() {
             sortList.appendChild(buildSortRow(spec, i));
         });
     }
+
+    renderFilterShelf();
+}
+
+/** The Filters drop zone mirrors the active conditions as removable chips. */
+function renderFilterShelf() {
+    const el = $("shelfFilters");
+    if (!el) return;
+    el.textContent = "";
+
+    if (!state.filter.length) {
+        const empty = document.createElement("span");
+        empty.className = "shelf-empty";
+        empty.textContent = "Drag fields here to filter";
+        el.appendChild(empty);
+        return;
+    }
+
+    state.filter.forEach((cond, index) => {
+        const chip = document.createElement("div");
+        chip.className = "shelf-chip";
+
+        const label = document.createElement("span");
+        label.className = "name";
+        label.textContent = cond[0];
+        label.title = cond[0];
+        chip.appendChild(label);
+
+        const drop = document.createElement("button");
+        drop.type = "button";
+        drop.className = "drop";
+        drop.textContent = "\u00d7";
+        drop.setAttribute("aria-label", `Remove the filter on ${cond[0]}`);
+        drop.addEventListener("click", () => {
+            state.filter.splice(index, 1);
+            refreshView();
+        });
+        chip.appendChild(drop);
+        el.appendChild(chip);
+    });
 }
 
 function buildFilterRow(cond, index) {
@@ -491,14 +570,14 @@ function buildFilterRow(cond, index) {
     op.value = cond[1] || "==";
     row.appendChild(op);
 
-    const value = document.createElement("input");
-    value.type = "text";
-    value.value = cond[2] === undefined || cond[2] === null ? "" : String(cond[2]);
-    value.placeholder = "value";
-    row.appendChild(value);
+    // The value control is a picker of the values actually present, the way
+    // Excel's filter is — falling back to a text box when the column has too
+    // many distinct values (or the operator needs free text).
+    const host = document.createElement("span");
+    host.className = "rule-value-host";
+    row.appendChild(host);
 
-    const commit = () => {
-        const raw = value.value;
+    const commit = (raw) => {
         const asNumber = Number(raw);
         const cast = raw !== "" && !Number.isNaN(asNumber) &&
             state.numeric.includes(column.value)
@@ -507,9 +586,61 @@ function buildFilterRow(cond, index) {
         state.filter[index] = [column.value, op.value, cast];
         refreshView();
     };
-    column.addEventListener("change", commit);
-    op.addEventListener("change", commit);
-    value.addEventListener("change", commit);
+
+    const paintValue = (data) => {
+        host.textContent = "";
+        const needsText =
+            !data || data.truncated || !data.values.length ||
+            op.value === "contains" || op.value === "begins with";
+
+        if (needsText) {
+            const input = document.createElement("input");
+            input.type = "text";
+            input.value = cond[2] === undefined || cond[2] === null
+                ? "" : String(cond[2]);
+            input.placeholder = "value";
+            input.addEventListener("change", () => commit(input.value));
+            host.appendChild(input);
+            return;
+        }
+
+        const picker = document.createElement("select");
+        const any = document.createElement("option");
+        any.value = "";
+        any.textContent = "(Any)";
+        picker.appendChild(any);
+
+        data.values.forEach((v) => {
+            const opt = document.createElement("option");
+            opt.value = String(v);
+            opt.textContent = String(v);
+            picker.appendChild(opt);
+        });
+        if (data.has_blanks) {
+            const opt = document.createElement("option");
+            opt.value = "";
+            opt.textContent = "(Blanks)";
+            picker.appendChild(opt);
+        }
+
+        picker.value = cond[2] === undefined || cond[2] === null
+            ? "" : String(cond[2]);
+        picker.addEventListener("change", () => commit(picker.value));
+        host.appendChild(picker);
+    };
+
+    paintValue(null);
+    distinctValues(cond[0]).then(paintValue);
+
+    column.addEventListener("change", () => {
+        // A new field means a new value list and a clean condition.
+        state.filter[index] = [column.value, op.value, ""];
+        refreshView();
+    });
+    op.addEventListener("change", () => {
+        state.filter[index] = [column.value, op.value, cond[2]];
+        renderRules();
+    });
 
     const drop = document.createElement("button");
     drop.type = "button";
@@ -743,8 +874,22 @@ function initFields() {
         refreshView();
     });
 
+    // Report options map straight onto Perspective's rollup modes: with totals
+    // the grouped axis keeps its "Total" rows, without them it is flat.
+    const wireTotals = (id, key) => {
+        const box = $(id);
+        if (!box) return;
+        box.addEventListener("change", () => {
+            state[key] = box.checked ? "rollup" : "flat";
+            refreshView();
+        });
+    };
+    wireTotals("optGrandTotals", "grandTotals");
+    wireTotals("optRowTotals", "columnSubtotals");
+
     // Every shelf is a drop target; dropping onto a chip inserts before it.
-    [["shelfGroup", "group"], ["shelfSplit", "split"], ["shelfValues", "values"]]
+    [["shelfGroup", "group"], ["shelfSplit", "split"],
+     ["shelfValues", "values"], ["shelfFilters", "filters"]]
         .forEach(([id, shelf]) => {
             const el = $(id);
             if (!el) return;
@@ -764,6 +909,19 @@ function initFields() {
                 el.classList.remove("is-over");
                 const column = e.dataTransfer.getData("text/plain");
                 if (!column || !state.schema.includes(column)) return;
+
+                // Filters are conditions, not an ordered list, so a drop simply
+                // adds one (or clears the existing one for that field).
+                if (shelf === "filters") {
+                    const existing = state.filter.findIndex((c) => c[0] === column);
+                    if (existing >= 0) {
+                        state.filter.splice(existing, 1);
+                    } else {
+                        state.filter.push([column, "==", ""]);
+                    }
+                    refreshView();
+                    return;
+                }
 
                 const chip = e.target.closest(".shelf-chip");
                 const index = chip ? Number(chip.dataset.index) : state[
@@ -896,8 +1054,24 @@ function syncToolbarFromConfig(cfg) {
     const isDefault = rest.length > 0 && rest.every((c) => cols.includes(c));
     state.columns = isDefault ? [] : cols;
 
-    state.filter = Array.isArray(cfg.filter) ? cfg.filter : [];
+    // The viewer only reports conditions it actually applied, so a field the
+    // user has dropped on Filters but not yet given a value to would be lost.
+    // Keep those drafts, keyed by field.
+    const incomingFilter = Array.isArray(cfg.filter) ? cfg.filter : [];
+    const drafts = state.filter.filter(
+        (c) => isDraftFilter(c) && !incomingFilter.some((i) => i[0] === c[0])
+    );
+    state.filter = incomingFilter.concat(drafts);
     state.sort = Array.isArray(cfg.sort) ? cfg.sort : [];
+
+    // Rollup modes come back from the viewer, so the checkboxes stay honest
+    // even when the AI assistant changes them.
+    if (cfg.group_rollup_mode) state.grandTotals = cfg.group_rollup_mode;
+    if (cfg.split_rollup_mode) state.columnSubtotals = cfg.split_rollup_mode;
+    const totals = $("optGrandTotals");
+    const subtotals = $("optRowTotals");
+    if (totals) totals.checked = state.grandTotals !== "flat";
+    if (subtotals) subtotals.checked = state.columnSubtotals !== "flat";
 
     // Keep our aggregate choice when the incoming config omits it — the viewer
     // only reports aggregates it considers non-default.
@@ -1067,6 +1241,8 @@ function gridThemeCss(colors) {
     const onPrimary = readableOn(primary);
     const zebra = mixHex(primary, "#ffffff", 0.955);
     const rowHover = mixHex(primary, "#ffffff", 0.9);
+    const rowHeader = mixHex(primary, "#ffffff", 0.975);
+    const rowHeaderHover = mixHex(primary, "#ffffff", 0.945);
 
     return `
 /* ---- header: mirrors table.data thead th ---- */
@@ -1100,6 +1276,43 @@ tbody th {
 tbody tr:hover td,
 tbody tr:hover th {
     background-color: ${rowHover} !important;
+}
+
+/* ---- row headers: the grouped first column ----
+   Tinted and semibold so the hierarchy reads at a glance, the way Excel's row
+   labels do, and separated from the measures by a stronger rule. */
+tbody th {
+    background-color: ${rowHeader} !important;
+    font-weight: 600 !important;
+    border-right: 1px solid #d8d8d8 !important;
+}
+tbody tr:hover th {
+    background-color: ${rowHeaderHover} !important;
+}
+
+/* The tree guides between levels, softened to a hairline. */
+tbody th span.rt-tree-group {
+    border-left-color: #d8d8d8 !important;
+}
+
+/* ---- scrollbars ----
+   The plugin paints its own track; give it one that matches the app instead of
+   the browser default. */
+::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+}
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+    background: #f7f7f7;
+}
+::-webkit-scrollbar-thumb {
+    background: #c8c8c8;
+    border: 3px solid #f7f7f7;
+    border-radius: 7px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: #9e9e9e;
 }
 
 /* Values the plugin reads when it paints. */
@@ -1221,8 +1434,34 @@ function chartColumns() {
  */
 function buildViewConfig(spec) {
     const cfg = rawViewConfig(spec);
-    // v5 names the table inside the config, so every config carries it.
-    return cfg ? { ...cfg, table: TABLE_NAME } : null;
+    if (!cfg) return null;
+    // v5 names the table inside the config, and the rollup modes apply to every
+    // view, so both are added here rather than in each branch.
+    return {
+        ...cfg,
+        table: TABLE_NAME,
+        group_rollup_mode: state.grandTotals || "rollup",
+        split_rollup_mode: state.columnSubtotals || "rollup",
+    };
+}
+
+/**
+ * Only conditions with a value actually filter.
+ *
+ * Dropping a field on the Filters shelf creates the condition before the user
+ * has chosen anything, which is Excel's behaviour too — the field sits there
+ * showing "(All)" and the view is untouched until a value is picked.
+ */
+function activeFilter() {
+    return state.filter.filter(
+        (c) => Array.isArray(c) && c[2] !== "" && c[2] !== null && c[2] !== undefined
+    );
+}
+
+/** A condition with no value yet — shown in the pane, not applied to the view. */
+function isDraftFilter(cond) {
+    return !Array.isArray(cond) || cond[2] === "" || cond[2] === null ||
+        cond[2] === undefined;
 }
 
 function rawViewConfig(spec) {
@@ -1232,6 +1471,7 @@ function rawViewConfig(spec) {
     const aggregates = Object.keys(state.aggregates || {}).length
         ? state.aggregates
         : undefined;
+    const filter = activeFilter();
 
     if (spec.kind === "grid") {
         return {
@@ -1239,7 +1479,7 @@ function rawViewConfig(spec) {
             group_by: group,
             split_by: split,
             columns: state.columns.length ? state.columns : state.schema.slice(),
-            filter: state.filter,
+            filter,
             sort: state.sort,
             aggregates,
             // Zebra is a row *count*: 1 means every other row, matching what the
@@ -1259,7 +1499,7 @@ function rawViewConfig(spec) {
             group_by: groupAxis,
             split_by: split,
             columns,
-            filter: state.filter,
+            filter,
             sort: state.sort,
             aggregates,
         };
@@ -1283,7 +1523,7 @@ function rawViewConfig(spec) {
             group_by: [],
             split_by: split,
             columns: [x, ...ys],
-            filter: state.filter,
+            filter,
             sort: state.sort,
             aggregates,
         };
@@ -1302,7 +1542,7 @@ function rawViewConfig(spec) {
             group_by: groupAxis,
             split_by: usable,
             columns: [columns[0]],
-            filter: state.filter,
+            filter,
             sort: state.sort,
             aggregates,
         };
@@ -1320,7 +1560,7 @@ function rawViewConfig(spec) {
             group_by: [dateField.name],
             split_by: [],
             columns: picked,
-            filter: state.filter,
+            filter,
             sort: state.sort,
         };
     }
@@ -1331,7 +1571,7 @@ function rawViewConfig(spec) {
         group_by: groupAxis,
         split_by: split,
         columns,
-        filter: state.filter,
+        filter,
         sort: state.sort,
     };
 }

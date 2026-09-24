@@ -1635,6 +1635,67 @@ def api_kpis():
     return jsonify({"success": True, "profile": profile})
 
 
+@app.route("/api/values")
+def api_values():
+    """
+    Distinct values of one column, for the dashboard's filter pickers.
+
+    Excel offers a checkbox list of the values present in a field; this is the
+    same idea. Results are capped so a high-cardinality column (an id, a date)
+    cannot flood the picker, and the caller is told when it was truncated so it
+    can fall back to typing a value.
+    """
+    frame = SESSION_DATA.get("processed_df")
+    if frame is None:
+        frame = SESSION_DATA.get("df")
+    if frame is None:
+        return _err("No dataset loaded. Upload a file first.", 404)
+
+    column = (request.args.get("column") or "").strip()
+    if not column:
+        return _err("Which column?")
+    if column not in frame.columns:
+        return _err(f"Unknown column: {column}", 404)
+
+    try:
+        limit = max(1, min(2000, int(request.args.get("limit", 500) or 500)))
+    except (TypeError, ValueError):
+        limit = 500
+
+    series = frame[column]
+    # Nulls are offered as their own choice, the way Excel shows "(Blanks)".
+    values = series.dropna().unique().tolist()
+    has_blanks = bool(series.isna().any())
+
+    def sort_key(value):
+        # Numbers first in numeric order, everything else as text.
+        return (0, value, "") if isinstance(value, (int, float)) else (1, 0, str(value))
+
+    try:
+        values.sort(key=sort_key)
+    except TypeError:
+        values = sorted(values, key=lambda v: str(v))
+
+    truncated = len(values) > limit
+    shown = values[:limit]
+
+    def jsonable(value):
+        if isinstance(value, (int, float, str, bool)) or value is None:
+            return value
+        if hasattr(value, "isoformat"):
+            return value.isoformat()
+        return str(value)
+
+    return jsonify({
+        "success": True,
+        "column": column,
+        "values": [jsonable(v) for v in shown],
+        "truncated": truncated,
+        "has_blanks": has_blanks,
+        "total": len(values),
+    })
+
+
 @app.errorhandler(413)
 def too_large(_error):
     return jsonify({"success": False, "error": "File too large (max 100 MB)"}), 413

@@ -232,11 +232,33 @@
                         <span class="shelf-empty">Drag measures here to summarise</span>
                     </div>
                 </div>
+
+                <div class="shelf">
+                    <div class="shelf-head">Filters</div>
+                    <div class="shelf-drop shelf-drop-inline" id="shelfFilters"
+                         data-shelf="filters">
+                        <span class="shelf-empty">Drag fields here to filter</span>
+                    </div>
+                </div>
             </div>
 
             <div class="fields-section">
                 <div class="fields-section-head">
-                    Filters
+                    Report options
+                </div>
+                <label class="check-row">
+                    <input type="checkbox" id="optGrandTotals" checked>
+                    <span>Show grand totals (row totals)</span>
+                </label>
+                <label class="check-row">
+                    <input type="checkbox" id="optRowTotals">
+                    <span>Show a grand total column</span>
+                </label>
+            </div>
+
+            <div class="fields-section">
+                <div class="fields-section-head">
+                    Filter conditions
                     <button class="mini-btn" id="addFilter" type="button">Add</button>
                 </div>
                 <div class="rule-list" id="filterList"></div>

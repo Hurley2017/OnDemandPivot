@@ -432,4 +432,42 @@ assert excel <= {"Text", "Number", "Date", "Time", "Boolean"}
 assert "Text" in excel and "Number" in excel and "Date" in excel
 assert all("excel" in f for f in p["fields"])
 
+# --- 16. distinct values for the dashboard's filter pickers -------------------
+# Uses the real sample workbook: the CSV fixture `up()` defaults to has no
+# "Segment" column to enumerate.
+print("\ndistinct values (/api/values):")
+up(path=SAMPLE)
+client.post("/preview", json={})
+
+r = client.get("/api/values?column=Segment")
+j = r.get_json()
+assert r.status_code == 200 and j.get("success"), (r.status_code, j)
+print("  Segment ->", j["values"])
+assert set(j["values"]) >= {"Government", "Midmarket", "Enterprise"}
+assert j["truncated"] is False and j["total"] == len(j["values"])
+
+r = client.get("/api/values?column=Year")
+j = r.get_json()
+print("  Year    ->", j["values"])
+assert j["values"] == sorted(j["values"]), j["values"]
+assert all(isinstance(v, (int, float)) for v in j["values"]), j["values"]
+
+# A limit must truncate rather than refuse, and say so.
+r = client.get("/api/values?column=Sales&limit=5")
+j = r.get_json()
+print("  Sales limit=5 ->", len(j["values"]), "of", j["total"],
+      "| truncated:", j["truncated"])
+assert j["truncated"] is True and len(j["values"]) == 5
+
+# A column with blanks reports them, so the picker can offer "(Blanks)".
+r = client.get("/api/values?column=Discount Band")
+j = r.get_json()
+print("  Discount Band blanks:", j["has_blanks"], "| total:", j["total"])
+assert j["has_blanks"] is True
+
+for query, want in [("", 400), ("?column=Nope", 404)]:
+    r = client.get("/api/values" + query)
+    print("  %-16s -> %s" % (query or "(no column)", r.status_code))
+    assert r.status_code == want, (query, r.status_code)
+
 print("\nALL BACKEND TESTS PASSED")
