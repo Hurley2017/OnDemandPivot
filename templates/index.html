@@ -44,8 +44,8 @@
                         <span class="wb-file" id="fileTag"></span>
                     </div>
                     <div class="wb-item" id="sheetField" hidden>
-                        <label class="wb-key" for="sheetSelect">Worksheet</label>
-                        <select class="wb-select" id="sheetSelect"></select>
+                        <span class="wb-key">Worksheet</span>
+                        <span class="wb-file" id="sheetTag"></span>
                     </div>
                 </div>
                 <div class="meta-chips" id="metaChips" hidden></div>
@@ -100,6 +100,12 @@
                      pops up its own panel over the preview. -->
                 <div class="group-bar-wrap">
                     <div class="group-bar">
+                        <button class="group-btn" type="button" id="sheetBtn"
+                                data-panel="grpSheet" aria-expanded="false" hidden>
+                            <span class="btn-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="2"/><path d="M3.5 9h17M9 3.5v17"/></svg></span>
+                            <span class="chev" aria-hidden="true"></span>
+                            Worksheet
+                        </button>
                         <button class="group-btn" type="button"
                                 data-panel="grpProfile" aria-expanded="false">
                             <span class="btn-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg></span>
@@ -143,6 +149,15 @@
                     </div>
 
                     <!-- --------------------------------------- pop-up panels -->
+                    <div class="group-panel" id="grpSheet" hidden>
+                        <div class="panel-head">
+                            Worksheet
+                            <span class="section-hint">which sheet holds your table</span>
+                            <span class="tag" id="sheetCount">—</span>
+                        </div>
+                        <div class="sheet-list" id="sheetList"></div>
+                    </div>
+
                     <div class="group-panel" id="grpProfile" hidden>
                         <div class="panel-head">
                             Column profile

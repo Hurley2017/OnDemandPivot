@@ -41,7 +41,7 @@
                          "optStrip", "optDropRows", "optDropRowsNull", "optDedupe",
                          "optDropCols", "optConstantCols", "optDuplicateCols",
                          "optNormalizeCols", "optCoerceNumbers", "sortDesc"];
-    const SELECT_FIELDS = ["sheetSelect", "textCase", "fillMissing", "dedupeKeep", "sortBy"];
+    const SELECT_FIELDS = ["textCase", "fillMissing", "dedupeKeep", "sortBy"];
     const TEXT_FIELDS = ["dataRange", "dropCols", "replaceFind", "replaceWith"];
 
     /* control id -> backend option name */
@@ -91,6 +91,9 @@
         TEXT_FIELDS.forEach((id) => {
             payload[OPTION_MAP[id]] = ($(id).value || "").trim();
         });
+        // The worksheet is chosen from its own panel rather than a control that
+        // lives inside one of the option groups.
+        payload.sheet = currentSheet();
         return payload;
     }
 
@@ -153,28 +156,67 @@
     }
 
     /**
-     * Populate the worksheet picker in the header; hide it for single-sheet
-     * workbooks and for CSV uploads, where there is nothing to choose.
+     * The worksheet picker, as a pop-up panel like the other option groups.
+     *
+     * A workbook can hold dozens of sheets, so they are listed as buttons in a
+     * scrollable panel rather than squeezed into a dropdown — and the header
+     * keeps a read-only note of which one is open.
      */
-    function renderSheets(sheets, chosen) {
-        const field = $("sheetField");
-        const select = $("sheetSelect");
-        const list = Array.isArray(sheets) ? sheets : [];
+    let chosenSheet = "";
 
-        if (list.length <= 1) {
-            field.hidden = true;
-            select.innerHTML = list.length
-                ? `<option value="${escapeHtml(list[0])}">${escapeHtml(list[0])}</option>`
-                : "";
+    function renderSheets(sheets, chosen) {
+        const btn = $("sheetBtn");
+        const list = $("sheetList");
+        const field = $("sheetField");
+        const names = Array.isArray(sheets) ? sheets : [];
+
+        if (chosen && names.includes(chosen)) chosenSheet = chosen;
+        if (!chosenSheet && names.length) chosenSheet = names[0];
+
+        // A single-sheet workbook has nothing to choose.
+        if (btn) btn.hidden = names.length <= 1;
+        if (field) field.hidden = names.length <= 1;
+        const tag = $("sheetTag");
+        if (tag) tag.textContent = chosenSheet || "—";
+
+        if (!list) return;
+        const count = $("sheetCount");
+        if (count) count.textContent = `${names.length} sheets`;
+
+        list.textContent = "";
+        if (!names.length) {
+            const empty = document.createElement("p");
+            empty.className = "fields-hint";
+            empty.textContent = "This file has no worksheets.";
+            list.appendChild(empty);
             return;
         }
 
-        field.hidden = false;
-        select.innerHTML = list
-            .map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`)
-            .join("");
-        if (chosen && list.includes(chosen)) select.value = chosen;
-        window.CPA.refreshSelects();
+        names.forEach((name) => {
+            const item = document.createElement("button");
+            item.type = "button";
+            item.className = "sheet-option" +
+                (name === chosenSheet ? " is-active" : "");
+            item.dataset.sheet = name;
+            item.textContent = name;
+            item.addEventListener("click", () => {
+                if (name === chosenSheet) return;
+                chosenSheet = name;
+                // Mark the choice, then let the normal preview path re-read it.
+                list.querySelectorAll(".sheet-option").forEach((el) =>
+                    el.classList.toggle("is-active", el.dataset.sheet === name)
+                );
+                if (tag) tag.textContent = name;
+                markModifiedGroups();
+                schedulePreview();
+            });
+            list.appendChild(item);
+        });
+    }
+
+    /** The sheet the user has picked, for the option payload. */
+    function currentSheet() {
+        return chosenSheet;
     }
 
     async function postJSON(url, payload) {
