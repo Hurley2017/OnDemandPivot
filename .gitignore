@@ -18,3 +18,8 @@ uploads/
 Thumbs.db
 .idea/
 .vscode/
+
+# Generated transfer bundles. Built by make_bundle.py, delivered by hand, and
+# never committed: a committed bundle gets packed into the next one.
+OnDemandPivot-Bundle.txt
+OnDemandPivot-Update.txt

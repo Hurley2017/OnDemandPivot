@@ -1,10 +1,15 @@
 """
 Build one self-extracting, plain-text bundle of the whole project.
 
+This is how the app is delivered to a machine that cannot pull from git: a
+single .txt that carries every file and unpacks itself. Generated bundles are
+never committed — a committed bundle gets packed into the next one, doubling it
+every round — so they live outside the repository and travel by hand.
+
 Two things have to be true at once:
 
-  * it is ONE .txt, because that is all that may cross the company email, and it
-    must unpack with nothing else travelling alongside it;
+  * it is ONE .txt, because that is all that may cross a locked-down mail
+    gateway, and it must unpack with nothing else travelling alongside it;
   * it reads as source, not as a single opaque blob, so it can be eyeballed and
     does not look like an encoded payload to a mail scanner.
 
@@ -15,13 +20,14 @@ binaries (the WASM engine, the font, the icons) are base64-encoded.
     python make_bundle.py                       # everything -> Desktop
     python make_bundle.py --source-only OUT     # skip static/vendor
 
-`--source-only` is for routine updates: the vendored Perspective engine and font
-are ~4.5 MB and never change between feature work, so leaving them out keeps the
-bundle small enough to read straight from GitHub's file view. The machine
-receiving an update already has them from the first full bundle.
+`--source-only` leaves out the vendored Perspective engine and font. They are
+~4.5 MB, binary, and unchanged between feature work, so a machine that already
+has them only needs the source.
 
 Everything git tracks is included, so fixtures and local sample data are
 excluded by construction.
+
+Recipient runs:  python OnDemandPivot-Bundle.txt [output-dir]
 """
 import base64
 import os
