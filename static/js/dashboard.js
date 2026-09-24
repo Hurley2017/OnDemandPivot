@@ -95,7 +95,29 @@ const VIEW_SPECS = [
     { label: "Candlestick", plugin: "Candlestick", kind: "ohlc", group: "Financial" },
 ];
 
-/** Keys Perspective's Table.view() accepts (the viewer config has extras). */
+/**
+ * The keys a *View* accepts — a subset of the ones a viewer does.
+ *
+ * `table.view(cfg)` builds a view, not a viewer, and rejects anything it does
+ * not recognise with "unknown field". `columns_config` is viewer-level (it
+ * styles the grid, which the view knows nothing about), so passing the full
+ * viewer config there fails whenever the gradient option is on — which is why
+ * downloading a table only broke sometimes.
+ */
+const VIEW_LEVEL_KEYS = [
+    "group_by",
+    "split_by",
+    "columns",
+    "filter",
+    "sort",
+    "expressions",
+    "aggregates",
+    "group_by_depth",
+    "filter_op",
+    "group_rollup_mode",
+    "split_rollup_mode",
+];
+
 const VIEW_CONFIG_KEYS = [
     "group_by",
     "split_by",
@@ -2095,6 +2117,15 @@ function viewConfigFrom(full) {
     return out;
 }
 
+/** The same config, narrowed to what `table.view()` will accept. */
+function viewOnlyConfig(full) {
+    const out = {};
+    VIEW_LEVEL_KEYS.forEach((k) => {
+        if (full && full[k] !== undefined) out[k] = full[k];
+    });
+    return out;
+}
+
 function saveBlob(blob, filename) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -2121,7 +2152,9 @@ async function downloadTable() {
     const table = await viewer.getTable();
     if (!table) throw new Error("The dataset is not ready yet.");
 
-    const cfg = viewConfigFrom(await viewer.save());
+    // A view takes only view-level keys; the viewer-level ones (columns_config,
+    // plugin, plugin_config, table, theme) are rejected here.
+    const cfg = viewOnlyConfig(await viewer.save());
     const view = await table.view(cfg);
     let arrow;
     let rows = 0;
