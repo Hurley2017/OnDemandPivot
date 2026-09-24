@@ -7,7 +7,25 @@ file, so it unpacks with nothing else travelling alongside it:
 python OnDemandPivot-Update.txt [output-dir]
 ```
 
-## Which one to use
+## The easiest way: `fetch-update.txt`
+
+`bundle/fetch-update.txt` is a small bootstrap. Copy its text, save it anywhere
+on the target machine, and run it:
+
+```
+python fetch-update.txt "C:\path\to\OnDemandPivot"
+```
+
+It fetches the latest update from GitHub itself, checks that what came back
+really is a bundle, and applies it. Nothing needs downloading by hand again.
+
+It tries three GitHub addresses in turn — `raw.githubusercontent.com`,
+`github.com/.../raw/...`, and `api.github.com` — because they are three
+different hostnames and a company proxy can easily allow one and not the others.
+If all three fail, the proxy is blocking command-line traffic to GitHub, and the
+message says so.
+
+## Which bundle to use
 
 | File | Size | Contains | Use |
 |---|---|---|---|
