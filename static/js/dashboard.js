@@ -2047,6 +2047,7 @@ async function loadKpis() {
     const data = await resp.json();
     if (!data.success) throw new Error(data.error || "KPI request failed.");
     state.profile = data.profile;
+    window.CPA.setDocumentTitle(data.profile && data.profile.filename);
     renderKpiList(data.profile);
     renderSummary(data.profile);
     return data.profile;

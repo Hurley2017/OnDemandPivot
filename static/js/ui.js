@@ -315,9 +315,20 @@
         });
     }
 
+    /**
+     * The browser tab reads "CP Analytics - <file>", or just "CP Analytics"
+     * before anything is loaded. Kept here so both pages title themselves the
+     * same way.
+     */
+    function setDocumentTitle(filename) {
+        const name = (filename || "").trim();
+        document.title = name ? `CP Analytics - ${name}` : "CP Analytics";
+    }
+
     window.CPA = {
         toast,
         escapeHtml,
+        setDocumentTitle,
         dismiss,
         initCollapsibles,
         initGroupBar,

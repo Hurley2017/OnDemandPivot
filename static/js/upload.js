@@ -246,6 +246,7 @@
      * two never say the same thing twice.
      */
     function renderStats(profile) {
+        window.CPA.setDocumentTitle(profile && profile.filename);
         const chips = [
             { value: profile.source_rows, label: "rows" },
             { value: profile.source_cols, label: "cols" },
@@ -409,7 +410,10 @@
         $("processBtn").hidden = !on;
         $("wbGroup").hidden = !on;
         $("metaChips").hidden = !on;
-        if (!on) setBusy(null);
+        if (!on) {
+            setBusy(null);
+            window.CPA.setDocumentTitle(null);
+        }
     }
 
     /**
