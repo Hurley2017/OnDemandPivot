@@ -12,23 +12,35 @@ So the file is a small Python program followed by the project's files as plain
 delimited records inside one raw string. Text files appear verbatim; only true
 binaries (the WASM engine, the font, the icons) are base64-encoded.
 
-    python OnDemandPivot-Bundle.txt [output-dir]
+    python make_bundle.py                       # everything -> Desktop
+    python make_bundle.py --source-only OUT     # skip static/vendor
+
+`--source-only` is for routine updates: the vendored Perspective engine and font
+are ~4.5 MB and never change between feature work, so leaving them out keeps the
+bundle small enough to read straight from GitHub's file view. The machine
+receiving an update already has them from the first full bundle.
 
 Everything git tracks is included, so fixtures and local sample data are
 excluded by construction.
-
-Regenerate with:  python make_bundle.py [output.txt]
 """
 import base64
 import os
 import subprocess
 import sys
 
+ARGS = [a for a in sys.argv[1:] if not a.startswith("--")]
+SOURCE_ONLY = "--source-only" in sys.argv
+
 ROOT = os.path.dirname(os.path.abspath(__file__))
-OUT = sys.argv[1] if len(sys.argv) > 1 else os.path.join(
-    os.path.expanduser("~"), "Desktop", "OnDemandPivot-Bundle.txt")
+DEFAULT_NAME = ("OnDemandPivot-Update.txt" if SOURCE_ONLY
+                else "OnDemandPivot-Bundle.txt")
+OUT = ARGS[0] if ARGS else os.path.join(os.path.expanduser("~"), "Desktop",
+                                        DEFAULT_NAME)
 
 SKIP_PREFIX = (".git", "tests/fixtures/")
+# The vendored engine and font: large, binary, and unchanged between feature
+# work. They travel once, in the full bundle.
+SOURCE_ONLY_SKIP = ("static/vendor/",)
 TEXT_EXT = {".py", ".js", ".css", ".html", ".md", ".txt", ".json",
             ".yml", ".yaml", ".cfg", ".ini", ".toml", ""}
 
@@ -40,6 +52,8 @@ files = subprocess.run(
     ["git", "ls-files"], cwd=ROOT, capture_output=True, text=True, check=True
 ).stdout.split()
 files = [f for f in files if not f.startswith(SKIP_PREFIX)]
+if SOURCE_ONLY:
+    files = [f for f in files if not f.startswith(SOURCE_ONLY_SKIP)]
 
 records = []
 raw_total = 0
@@ -98,9 +112,9 @@ OnDemandPivot - self-extracting source bundle.
 Carry this one .txt file; nothing else is needed. It is a Python program as well
 as a text file, so it runs straight from its own name:
 
-    python OnDemandPivot-Bundle.txt [output-dir]
+    python {basename} [output-dir]
 
-It unpacks the whole project into ./OnDemandPivot by default, then:
+It unpacks the project into ./OnDemandPivot by default, then:
 
     cd OnDemandPivot
     pip install -r requirements.txt
@@ -187,6 +201,7 @@ if __name__ == "__main__":
 text_count = len(records) - encoded_binary
 text = TEMPLATE.format(
     payload=payload,
+    basename=os.path.basename(OUT),
     count=len(records),
     text_count=text_count,
     binary_count=encoded_binary,
