@@ -2853,13 +2853,40 @@ perspective-viewer [theme] {
     border-color: var(--red);
 }
 
-/* ---- available columns: pills that wrap, directly under the search box ---- */
+/* ---- available columns: pills that wrap, in a locked, scrollable area ---- */
 
 .field-list {
     display: flex;
     flex-wrap: wrap;
+    align-content: flex-start;
     gap: 5px;
     margin-top: 8px;
+    /* A locked height with its own scrollbar: a wide table can carry dozens of
+       columns, and letting them push the four drop areas off screen would bury
+       the thing you came here to do. */
+    max-height: 148px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-right: 2px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--grey-300) transparent;
+}
+
+.field-list::-webkit-scrollbar {
+    width: 8px;
+}
+
+.field-list::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.field-list::-webkit-scrollbar-thumb {
+    background: var(--grey-300);
+    border-radius: 4px;
+}
+
+.field-list::-webkit-scrollbar-thumb:hover {
+    background: var(--grey-400);
 }
 
 .field-pill {

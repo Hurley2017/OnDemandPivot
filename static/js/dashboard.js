@@ -1319,6 +1319,22 @@ tbody th span.rt-tree-group {
     border-left-color: #d8d8d8 !important;
 }
 
+/* ---- grand total column ----
+   The split rollup draws a totals column but captions it with the measure's
+   name, so it reads "Sales" beside seven other "Sales" columns and gives no
+   hint that it is the total. Replace the caption with "Tot" — short enough to
+   fit the narrow column. */
+regular-table thead th.psp-split-total {
+    font-size: 0 !important;
+}
+regular-table thead th.psp-split-total::after {
+    content: "Total";
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
 /* ---- scrollbars ----
    The plugin paints its own track; give it one that matches the app instead of
    the browser default. */
