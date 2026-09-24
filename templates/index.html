@@ -30,12 +30,24 @@
 <main class="page">
 
     <section class="card" id="importCard">
-        <!-- File name, source-file facts and Clear all live in the header, so
-             the body below is free for the workbench. -->
+        <!-- Workbook identity, the worksheet choice and the source-file facts
+             all live in the header, so the body below is free for the
+             workbench. The worksheet picker belongs here rather than buried in
+             the Structure panel: which sheet you are on is part of *what* is
+             open, not how it is reshaped. -->
         <div class="card-head card-head-import">
             <h2>Import &amp; prepare</h2>
             <div class="head-meta">
-                <span class="tag tag-file" id="fileTag" hidden></span>
+                <div class="wb-group" id="wbGroup" hidden>
+                    <div class="wb-item">
+                        <span class="wb-key">Workbook</span>
+                        <span class="wb-file" id="fileTag"></span>
+                    </div>
+                    <div class="wb-item" id="sheetField" hidden>
+                        <label class="wb-key" for="sheetSelect">Worksheet</label>
+                        <select class="wb-select" id="sheetSelect"></select>
+                    </div>
+                </div>
                 <div class="meta-chips" id="metaChips" hidden></div>
                 <button class="btn btn-ghost btn-sm" id="clearFileBtn"
                         type="button" hidden>Clear</button>
@@ -159,15 +171,6 @@
                             <span class="section-hint">where the table sits in the file</span>
                         </div>
 
-                        <div class="field" id="sheetField" hidden>
-                            <label for="sheetSelect">Worksheet</label>
-                            <select id="sheetSelect"></select>
-                            <div class="help">
-                                This workbook has more than one sheet — pick the
-                                one holding your table.
-                            </div>
-                        </div>
-
                         <div class="field-row">
                             <div class="field">
                                 <label for="skipRows">Skip first N rows</label>
@@ -195,9 +198,7 @@
                         </div>
 
                         <div class="field">
-                            <label for="dataRange">Data range
-                                <span class="tag">Precise</span>
-                            </label>
+                            <label for="dataRange">Data range</label>
                             <input id="dataRange" type="text" autocomplete="off"
                                    spellcheck="false">
                             <div class="help">

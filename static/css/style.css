@@ -505,6 +505,73 @@ code {
     justify-content: flex-end;
 }
 
+/* Workbook and worksheet read as one unit: which file, and which sheet inside
+   it. The worksheet half is a picker, so it carries the input styling. */
+.wb-group {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    background: var(--grey-050);
+    border: 1px solid var(--grey-300);
+    border-radius: var(--radius);
+    overflow: hidden;
+}
+
+.wb-item {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 1px;
+    min-width: 0;
+    padding: 4px 11px;
+}
+
+/* Only the worksheet half gets a divider, so a single-sheet workbook shows one
+   clean block instead of a dangling separator. */
+.wb-item + .wb-item {
+    border-left: 1px solid var(--grey-200);
+}
+
+.wb-key {
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: var(--grey-500);
+}
+
+.wb-file {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--black);
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.wb-select {
+    font-family: var(--font);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--black);
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    padding: 0 18px 0 0;
+    max-width: 240px;
+    cursor: pointer;
+}
+
+.wb-select:focus {
+    outline: none;
+    box-shadow: none;
+}
+
+.wb-item:focus-within {
+    background: var(--white);
+}
+
 .tag-file {
     text-transform: none;
     letter-spacing: 0.02em;
@@ -2079,14 +2146,8 @@ body.page-dashboard .site-header {
     overflow: hidden;
 }
 
-/* On the dashboard the info panels open over the grid, and the status chip
-   lives on the button row rather than in the viewer caption. */
-.dash-main .group-bar-wrap {
-    flex: 0 0 auto;
-    margin-bottom: 12px;
-}
-
-.dash-main .group-bar-end {
+/* The status chip rides on the info button row in the command bar. */
+.group-bar-end {
     display: inline-flex;
     align-items: center;
     margin-left: auto;
@@ -3012,22 +3073,59 @@ perspective-viewer [theme] {
     color: var(--red);
 }
 
-/* The fields panel takes its own column, and shrinks on narrow screens. */
+/* The View selector lives at the top of the fields pane. */
+.fields-view {
+    width: 100%;
+    padding: 7px 10px;
+    font-family: var(--font);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink);
+    background: var(--white);
+    border: 1px solid var(--grey-300);
+    border-radius: var(--radius);
+}
+
+.fields-view:focus {
+    outline: none;
+    border-color: var(--red);
+    box-shadow: 0 0 0 3px rgba(219, 0, 17, 0.14);
+}
+
+/* The info buttons sit in the command bar, where the pivot controls used to be.
+   They carry their own bottom border, so the bar's is suppressed. */
+.cmd-info {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin-bottom: 0;
+}
+
+.group-bar-plain {
+    padding-bottom: 0;
+    border-bottom: none;
+}
+
+.cmd-info .group-panel {
+    top: calc(100% + 6px);
+}
+
+/* The PivotTable Fields pane takes the right column, Excel-style; the AI dock
+   takes a further column of its own. */
 .dash-layout.fields-open {
-    grid-template-columns: 300px minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) 320px;
 }
 
 .dash-layout.fields-open.chat-open {
-    grid-template-columns: 300px minmax(0, 1fr) 380px;
+    grid-template-columns: minmax(0, 1fr) 320px 380px;
 }
 
 @media (max-width: 1180px) {
     .dash-layout.fields-open {
-        grid-template-columns: 250px minmax(0, 1fr);
+        grid-template-columns: minmax(0, 1fr) 272px;
     }
 
     .dash-layout.fields-open.chat-open {
-        grid-template-columns: 250px minmax(0, 1fr) 340px;
+        grid-template-columns: minmax(0, 1fr) 272px 340px;
     }
 }
 

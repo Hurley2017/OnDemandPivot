@@ -356,6 +356,16 @@ if os.path.exists(MULTI):
     print("  skip_rows on the same sheet keeps source at",
           skipped["profile"]["source_rows"], "while cleaned is",
           skipped["profile"]["rows"])
+
+    # A sheet change while skip_rows is already set must still record the
+    # sheet's *own* shape, not the shape after skipping.
+    r = client.post("/preview", json={"sheet": "Detail", "skip_rows": 1})
+    switched = r.get_json()
+    assert switched["profile"]["source_rows"] == 4, switched["profile"]["source_rows"]
+    assert switched["profile"]["rows"] == 3, switched["profile"]["rows"]
+    print("  sheet change with skip_rows=1 -> source",
+          switched["profile"]["source_rows"], "cleaned",
+          switched["profile"]["rows"])
     up()
 
 # --- 12. unsupported extensions are refused ---------------------------------

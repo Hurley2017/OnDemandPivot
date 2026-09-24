@@ -99,7 +99,7 @@
        its options differ from the defaults. */
     const GROUP_OPTIONS = {
         grpStructure: ["skipRows", "skipLastRows", "skipCols", "skipLastCols",
-                       "dataRange", "sheetSelect"],
+                       "dataRange"],
         grpShape: ["optHasHeader", "optPromote", "optTranspose"],
         grpRows: ["optDropRows", "optDropRowsNull", "optDedupe", "dedupeKeep",
                   "sortBy", "sortDesc"],
@@ -152,7 +152,10 @@
         window.CPA.refreshSelects();
     }
 
-    /** Populate the worksheet picker; hide it entirely for CSV uploads. */
+    /**
+     * Populate the worksheet picker in the header; hide it for single-sheet
+     * workbooks and for CSV uploads, where there is nothing to choose.
+     */
     function renderSheets(sheets, chosen) {
         const field = $("sheetField");
         const select = $("sheetSelect");
@@ -172,7 +175,6 @@
             .join("");
         if (chosen && list.includes(chosen)) select.value = chosen;
         window.CPA.refreshSelects();
-        markModifiedGroups();
     }
 
     async function postJSON(url, payload) {
@@ -337,16 +339,25 @@
     /* --------------------------------------------------------- upload flow */
 
     /* The only place the file name is shown, now that the site header is bare. */
+
+    /** "251.4 KB" / "12.1 MB" — the workbook block reads as name · size. */
+    function sizeLabel(bytes) {
+        const n = Number(bytes);
+        if (!Number.isFinite(n) || n <= 0) return "";
+        if (n < 1024) return `${n} B`;
+        if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+        return `${(n / 1024 / 1024).toFixed(1)} MB`;
+    }
+
     function setFileTag(name, size) {
         const tag = $("fileTag");
         if (!name) {
-            tag.hidden = true;
             tag.textContent = "";
+            tag.removeAttribute("title");
             return;
         }
-        tag.hidden = false;
         tag.textContent = name + (size ? ` · ${size}` : "");
-        tag.title = name;
+        tag.title = name + (size ? ` (${size})` : "");
     }
 
     /** Swap the drop zone for the file's facts once something is loaded. */
@@ -354,7 +365,7 @@
         $("dropzone").hidden = on;
         $("clearFileBtn").hidden = !on;
         $("processBtn").hidden = !on;
-        $("fileTag").hidden = !on;
+        $("wbGroup").hidden = !on;
         $("metaChips").hidden = !on;
         if (!on) setBusy(null);
     }
@@ -409,7 +420,7 @@
         showLoaded(true);
 
         const shown = (data.profile && data.profile.filename) || name;
-        setFileTag(shown, `${(blob.size / 1024).toFixed(1)} KB`);
+        setFileTag(shown, sizeLabel((data.profile || {}).file_bytes || blob.size));
         toast(
             `Loaded ${shown} — ${data.profile.rows} rows × ` +
                 `${data.profile.cols} columns.`,
@@ -435,7 +446,7 @@
         applyOptions(data.options);
         renderAll(data);
         showLoaded(true);
-        setFileTag(data.filename);
+        setFileTag(data.filename, sizeLabel((data.profile || {}).file_bytes));
     }
 
     async function handleFile(file) {

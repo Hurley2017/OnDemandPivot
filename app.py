@@ -1158,14 +1158,26 @@ _TEXT_OPTIONS = (
 
 def _recapture_source_shape_if_sheet_changed(options: dict) -> None:
     """
-    Reset the recorded source shape when the worksheet changes.
+    Recapture the source shape when the worksheet changes.
 
-    `source_shape` is captured on the very first read of an upload and then left
-    alone, so restructuring never moves it. Switching worksheets is the one
-    change that invalidates it — without this the header keeps reporting the
-    previous sheet's dimensions.
+    `source_shape` is the worksheet's own dimensions, independent of any
+    restructuring, so it is read back with the structural options cleared.
+    Merely clearing it would let the next rebuild capture whatever `skip_rows`
+    and `data_range` happen to be set to.
     """
-    if options.get("sheet") != (SESSION_DATA.get("options") or {}).get("sheet"):
+    if options.get("sheet") == (SESSION_DATA.get("options") or {}).get("sheet"):
+        return
+    try:
+        fresh = _read_file(
+            SESSION_DATA["path"],
+            skip_rows=0,
+            skip_cols=0,
+            data_range="",
+            has_header=True,
+            sheet=options.get("sheet", ""),
+        )
+        SESSION_DATA["source_shape"] = [int(len(fresh)), int(fresh.shape[1])]
+    except Exception:  # noqa: BLE001 - a bad sheet is reported by _rebuild
         SESSION_DATA["source_shape"] = None
 
 

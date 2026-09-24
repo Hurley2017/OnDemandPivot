@@ -370,10 +370,10 @@ function renderShelves() {
         if (!cols.length) {
             const empty = document.createElement("span");
             empty.className = "shelf-empty";
-            empty.textContent = el.dataset.empty || {
-                group: "Drop columns here to group rows",
-                split: "Drop columns here to split series",
-                values: "Drop measures here to aggregate",
+            empty.textContent = {
+                group: "Drag fields here to build rows",
+                split: "Drag fields here to build columns",
+                values: "Drag measures here to summarise",
             }[key];
             el.appendChild(empty);
             return;
@@ -432,27 +432,6 @@ function renderShelves() {
             el.appendChild(chip);
         });
     });
-
-    renderPills();
-}
-
-function renderPills() {
-    const set = (pillId, valueId, values, emptyLabel) => {
-        const pill = $(pillId);
-        const value = $(valueId);
-        if (!pill || !value) return;
-        const has = values.length > 0;
-        pill.classList.toggle("is-set", has);
-        value.textContent = has
-            ? values.length > 2
-                ? `${values.slice(0, 2).join(", ")} +${values.length - 2}`
-                : values.join(", ")
-            : emptyLabel;
-    };
-
-    set("pillGroup", "pillGroupValue", state.groupBy, "\u2014 none \u2014");
-    set("pillSplit", "pillSplitValue", state.splitBy, "\u2014 none \u2014");
-    set("pillValues", "pillValuesValue", state.columns, "\u2014 all \u2014");
 }
 
 /** Human text for one filter condition. */
@@ -638,24 +617,12 @@ function initFields() {
         dock.hidden = !open;
         layout.classList.toggle("fields-open", open);
         btn.setAttribute("aria-expanded", open ? "true" : "false");
+        btn.textContent = open ? "Hide Fields" : "Show Fields";
         if (open) renderFieldList();
     };
 
     btn.addEventListener("click", () => setOpen(dock.hidden));
     $("fieldsClose").addEventListener("click", () => setOpen(false));
-    // The summary pills are the fast way in, and open the matching shelf.
-    ["pillGroup", "pillSplit", "pillValues"].forEach((id) => {
-        $(id).addEventListener("click", () => {
-            setOpen(true);
-            const shelf = $(id).dataset.shelf;
-            const target = $("shelf" + shelf.charAt(0).toUpperCase() + shelf.slice(1));
-            if (target) {
-                target.scrollIntoView({ block: "nearest", behavior: "smooth" });
-                target.classList.add("is-over");
-                setTimeout(() => target.classList.remove("is-over"), 700);
-            }
-        });
-    });
 
     $("fieldSearch").addEventListener("input", renderFieldList);
 
@@ -875,18 +842,49 @@ const PALETTES = [
 const PALETTE_KEY = "cpa.palette.v1";
 
 function hexToRgba(hex, alpha) {
-    const value = String(hex).replace("#", "");
+    const [r, g, b] = hexToRgb(hex);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+/** "#db0011" -> [219, 0, 17] */
+function hexToRgb(hex) {
+    const value = String(hex || "").replace("#", "");
     const full =
         value.length === 3
             ? value.split("").map((c) => c + c).join("")
             : value.padEnd(6, "0").slice(0, 6);
     const int = parseInt(full, 16);
+    if (!Number.isFinite(int)) return [0, 0, 0];
     /* eslint-disable no-bitwise */
-    const r = (int >> 16) & 255;
-    const g = (int >> 8) & 255;
-    const b = int & 255;
+    return [(int >> 16) & 255, (int >> 8) & 255, int & 255];
     /* eslint-enable no-bitwise */
-    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function rgbToHex([r, g, b]) {
+    const part = (n) => Math.max(0, Math.min(255, Math.round(n)))
+        .toString(16).padStart(2, "0");
+    return `#${part(r)}${part(g)}${part(b)}`;
+}
+
+/** Blend `hex` toward `target` by `amount` (0 = unchanged, 1 = target). */
+function mixHex(hex, target, amount) {
+    const a = hexToRgb(hex);
+    const b = hexToRgb(target);
+    return rgbToHex(a.map((v, i) => v + (b[i] - v) * amount));
+}
+
+/**
+ * Black or white, whichever stays legible on `hex`.
+ * Uses the WCAG relative-luminance weights, so mid reds and blues get white
+ * text while a pale custom colour gets black.
+ */
+function readableOn(hex) {
+    const [r, g, b] = hexToRgb(hex).map((v) => {
+        const c = v / 255;
+        return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    });
+    const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    return luminance > 0.45 ? "#1a1a1a" : "#ffffff";
 }
 
 /**
@@ -932,6 +930,10 @@ function paintViewer(viewer, colors) {
         "perspective-viewer," +
         "perspective-viewer[theme]," +
         `perspective-viewer [theme]{${decls.join("")}}`;
+
+    // The table follows the same palette, so the Colours picker themes the
+    // whole workbench rather than just the charts.
+    styleGrid(colors, viewer);
 }
 
 /**
@@ -943,27 +945,40 @@ function paintViewer(viewer, colors) {
  * and row height are read from custom properties when the plugin paints, so
  * those go on :host.
  *
- * Injected once per shadow root, keyed with a marker attribute.
+ * The header takes the palette's primary colour and the banding takes a tint of
+ * it, so the Colours picker themes the table as well as the charts. The header
+ * text flips to black when the primary is too pale to carry white.
+ *
+ * Injected once per shadow root, keyed with a marker attribute, and rewritten in
+ * place when the palette changes.
  */
-const GRID_THEME_CSS = `
+function gridThemeCss(colors) {
+    const primary = (colors && colors[0]) || "#db0011";
+    const hover = mixHex(primary, "#000000", 0.16);
+    const divider = mixHex(primary, "#ffffff", 0.28);
+    const onPrimary = readableOn(primary);
+    const zebra = mixHex(primary, "#ffffff", 0.955);
+    const rowHover = mixHex(primary, "#ffffff", 0.9);
+
+    return `
 /* ---- header: mirrors table.data thead th ---- */
 thead th {
-    background: #db0011 !important;
-    color: #ffffff !important;
+    background: ${primary} !important;
+    color: ${onPrimary} !important;
     font-weight: 700 !important;
     font-size: 10.5px !important;
     letter-spacing: 0.08em !important;
     text-transform: uppercase !important;
-    border-bottom: 1px solid #b5000e !important;
-    border-right: 1px solid #b5000e !important;
+    border-bottom: 1px solid ${hover} !important;
+    border-right: 1px solid ${divider} !important;
     padding: 0 12px !important;
 }
 thead th:hover {
-    background: #b5000e !important;
+    background: ${hover} !important;
 }
 thead th :is(.psp-header-sort-asc, .psp-header-sort-desc,
              .psp-header-sort-col-asc, .psp-header-sort-col-desc)::after {
-    background-color: #ffffff !important;
+    background-color: ${onPrimary} !important;
 }
 
 /* ---- body: mirrors table.data tbody td ---- */
@@ -976,12 +991,12 @@ tbody th {
 }
 tbody tr:hover td,
 tbody tr:hover th {
-    background-color: #fff2f3 !important;
+    background-color: ${rowHover} !important;
 }
 
 /* Values the plugin reads when it paints. */
 :host {
-    --psp-datagrid--zebra--color: #fafafa;
+    --psp-datagrid--zebra--color: ${zebra};
     --psp-datagrid--row--height: 30px;
     --psp-datagrid--border-color: #e2e2e2;
     --psp-datagrid--hover--border-color: #e2e2e2;
@@ -993,17 +1008,27 @@ regular-table #psp-column-edit-buttons {
     display: none !important;
 }
 `;
+}
 
-function styleGrid() {
-    const grid = [...$("viewer").children].find((el) =>
+/**
+ * Inject (or refresh) the grid theme in the datagrid plugin's shadow root.
+ * Safe to call on every render and on every palette change.
+ */
+function styleGrid(colors, viewer) {
+    const host = viewer || $("viewer");
+    const grid = [...host.children].find((el) =>
         el.tagName.toLowerCase().startsWith("perspective-viewer-datagrid")
     );
     const root = grid && grid.shadowRoot;
-    if (!root || root.querySelector("style[data-hsbc-grid]")) return;
-    const style = document.createElement("style");
-    style.setAttribute("data-hsbc-grid", "1");
-    style.textContent = GRID_THEME_CSS;
-    root.appendChild(style);
+    if (!root) return;
+
+    let style = root.querySelector("style[data-hsbc-grid]");
+    if (!style) {
+        style = document.createElement("style");
+        style.setAttribute("data-hsbc-grid", "1");
+        root.appendChild(style);
+    }
+    style.textContent = gridThemeCss(colors || state.palette || PALETTES[0].colors);
 }
 
 function loadPalette() {
