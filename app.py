@@ -573,7 +573,8 @@ DEFAULT_OPTIONS = {
     "drop_rows_with_null": False,
     "dedupe": True,
     "dedupe_keep": "first",
-    "sort_by": "",
+    "dedupe_cols": "",
+    "sort_by": [],
     "sort_desc": False,
     # -- columns -----------------------------------------------------------
     "drop_empty_cols": True,
@@ -643,6 +644,60 @@ def _case_variant_examples(series: pd.Series, folded: pd.Series) -> str:
         if len(pairs) == 2:
             break
     return "; ".join(pairs)
+
+
+def _match_column(df: pd.DataFrame, name) -> str | None:
+    """The real column whose name matches `name`, ignoring case and padding."""
+    wanted = str(name).strip().lower()
+    if not wanted:
+        return None
+    return next(
+        (c for c in df.columns if str(c).strip().lower() == wanted),
+        None,
+    )
+
+
+def _dedupe_columns(df: pd.DataFrame, raw) -> list | None:
+    """
+    The columns that decide whether two rows are duplicates.
+
+    Empty or unreadable means every column, which is the honest default: only
+    rows identical across the board are removed.
+    """
+    names = [n for n in re.split(r"[,\n;]", str(raw or "")) if n.strip()]
+    if not names:
+        return None
+    chosen = [c for c in (_match_column(df, n) for n in names) if c is not None]
+    return chosen or None
+
+
+def _sort_specs(df: pd.DataFrame, opts: dict) -> list[tuple[str, bool]]:
+    """
+    The sort keys, in priority order, as (column, descending) pairs.
+
+    Accepts the current list form — [["Country", "asc"], ["Sales", "desc"]] —
+    and the older single `sort_by` string with its separate `sort_desc` flag, so
+    a saved session from either shape still works.
+    """
+    specs: list[tuple[str, bool]] = []
+    raw = opts.get("sort_by")
+
+    if isinstance(raw, (list, tuple)):
+        for entry in raw:
+            if isinstance(entry, (list, tuple)) and entry:
+                column = _match_column(df, entry[0])
+                direction = str(entry[1]).lower() if len(entry) > 1 else "asc"
+            else:
+                column = _match_column(df, entry)
+                direction = "asc"
+            if column is not None:
+                specs.append((column, direction == "desc"))
+        return specs
+
+    column = _match_column(df, raw)
+    if column is not None:
+        specs.append((column, bool(opts.get("sort_desc"))))
+    return specs
 
 
 def _coerce_numeric_text(series: pd.Series) -> pd.Series:
@@ -848,7 +903,13 @@ def _apply_options(df: pd.DataFrame, options: dict) -> pd.DataFrame:
 
     if opts.get("dedupe") and len(df):
         keep = "last" if str(opts.get("dedupe_keep")) == "last" else "first"
-        df = df.drop_duplicates(keep=keep)
+        # Which columns decide whether two rows are "the same". Left empty it
+        # compares every column, which means only truly identical rows go — and
+        # then keep-first and keep-last differ solely in which position the
+        # survivor ends up at. Narrowing the comparison is what makes the choice
+        # mean something.
+        subset = _dedupe_columns(df, opts.get("dedupe_cols"))
+        df = df.drop_duplicates(subset=subset, keep=keep, ignore_index=False)
 
     # ------------------------------------------------------------- naming
     if opts.get("normalize_col_names") and df.shape[1]:
@@ -856,19 +917,17 @@ def _apply_options(df: pd.DataFrame, options: dict) -> pd.DataFrame:
         df.columns = [_unique_name(_snake_name(c), taken) for c in df.columns]
 
     # ------------------------------------------------------------- sorting
-    sort_by = str(opts.get("sort_by") or "").strip()
-    if sort_by and df.shape[1]:
-        match = next(
-            (c for c in df.columns if str(c).strip().lower() == sort_by.lower()),
-            None,
+    # One multi-key sort rather than a sort per key: a stable sort applied in
+    # priority order would let the *last* key reorder everything and undo the
+    # first, which is the classic way to get this wrong.
+    specs = _sort_specs(df, opts)
+    if specs and len(df):
+        df = df.sort_values(
+            by=[column for column, _desc in specs],
+            ascending=[not desc for _column, desc in specs],
+            kind="stable",
+            na_position="last",
         )
-        if match is not None and len(df):
-            df = df.sort_values(
-                by=match,
-                ascending=not bool(opts.get("sort_desc")),
-                kind="stable",
-                na_position="last",
-            )
 
     return df.reset_index(drop=True)
 
@@ -1312,13 +1371,16 @@ _TEXT_OPTIONS = (
     "data_range",
     "sheet",
     "drop_cols",
-    "sort_by",
+    "dedupe_cols",
     "text_case",
     "fill_missing",
     "dedupe_keep",
     "replace_find",
     "replace_with",
 )
+
+# sort_by is a list of [column, direction] pairs, so it is merged by hand
+# rather than through the string options above.
 
 
 def _recapture_source_shape_if_sheet_changed(options: dict) -> None:
@@ -1364,6 +1426,25 @@ def _merge_options(payload: dict | None) -> dict:
     for key in _TEXT_OPTIONS:
         if key in payload:
             opts[key] = str(payload.get(key) or "").strip()
+
+    # A list of [column, "asc"|"desc"] pairs; the older single-string form is
+    # still accepted so a saved session from either shape keeps working.
+    raw_sort = payload.get("sort_by")
+    if isinstance(raw_sort, list):
+        opts["sort_by"] = [
+            [str(entry[0]).strip(),
+             "desc" if len(entry) > 1 and str(entry[1]).lower() == "desc" else "asc"]
+            for entry in raw_sort
+            if isinstance(entry, (list, tuple)) and entry and str(entry[0]).strip()
+        ]
+    elif isinstance(raw_sort, str) and raw_sort.strip():
+        # The old shape: one column plus a separate descending flag.
+        opts["sort_by"] = [[
+            raw_sort.strip(),
+            "desc" if opts.get("sort_desc") else "asc",
+        ]]
+    else:
+        opts["sort_by"] = []
 
     try:
         opts["round_decimals"] = int(payload.get("round_decimals", -1))

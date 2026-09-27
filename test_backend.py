@@ -271,8 +271,30 @@ expect("round_decimals",
 expect("fill_missing=bfill", int(cleaned(fill_missing="bfill")["Discount Band"].isna().sum()), 0)
 expect("drop_rows_with_null", int(cleaned(drop_rows_with_null=True).isna().sum().sum()), 0)
 expect("dedupe_keep=last", len(cleaned(dedupe=True, dedupe_keep="last")), 701)
-_sales = cleaned(sort_by="Sales", sort_desc=True)["Sales"].dropna().tolist()
+
+# Sorting travels as ordered [column, direction] pairs now.
+_sales = cleaned(sort_by=[["Sales", "desc"]])["Sales"].dropna().tolist()
 expect("sort_by desc", _sales == sorted(_sales, reverse=True), True)
+_sales = cleaned(sort_by=[["Sales", "asc"]])["Sales"].dropna().tolist()
+expect("sort_by asc", _sales == sorted(_sales), True)
+
+# Two keys: the second only breaks ties in the first. Compared against pandas
+# doing the same sort directly — and via Series.equals, because nan != nan in
+# plain Python and would make two identical columns look different.
+_base = cleaned()
+_multi = cleaned(sort_by=[["Country", "asc"], ["Sales", "desc"]])
+_want = _base.sort_values(["Country", "Sales"], ascending=[True, False],
+                          kind="stable", na_position="last")
+expect("multi-sort matches a single multi-key sort",
+       bool(_multi["Sales"].reset_index(drop=True)
+            .equals(_want["Sales"].reset_index(drop=True))), True)
+expect("multi-sort matches on the first key too",
+       bool(_multi["Country"].reset_index(drop=True)
+            .equals(_want["Country"].reset_index(drop=True))), True)
+
+# The older single-string form still works, so a saved session survives.
+_sales = cleaned(sort_by="Sales", sort_desc=True)["Sales"].dropna().tolist()
+expect("legacy sort_by string", _sales == sorted(_sales, reverse=True), True)
 
 # --- 9. extended profile summary --------------------------------------------
 print("\nextended profile summary:")

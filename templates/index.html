@@ -272,21 +272,48 @@
                                 <span>Remove duplicate rows</span>
                             </label>
                         </div>
+
                         <div class="field-row">
                             <div class="field">
-                                <label for="dedupeKeep">Keep which copy</label>
-                                <select id="dedupeKeep">
-                                    <option value="first">First occurrence</option>
-                                    <option value="last">Last occurrence</option>
-                                </select>
+                                <label for="dedupeCols">
+                                    A row counts as a duplicate when these match
+                                    <span class="tag">blank = every column</span>
+                                </label>
+                                <input id="dedupeCols" type="text" autocomplete="off"
+                                       spellcheck="false" placeholder="e.g. Account, Date">
+                                <div class="help">
+                                    List a few columns to treat rows as the same
+                                    when only those agree — the usual case, since
+                                    two genuinely identical rows carry no extra
+                                    information and removing them changes nothing.
+                                </div>
                             </div>
                             <div class="field">
-                                <label for="sortBy">Sort by</label>
-                                <select id="sortBy"><option value="">— leave as-is —</option></select>
-                                <label class="check check-inline">
-                                    <input type="checkbox" id="sortDesc">
-                                    <span>Descending</span>
-                                </label>
+                                <label for="dedupeKeep">Which copy to keep</label>
+                                <select id="dedupeKeep">
+                                    <option value="first">The first one</option>
+                                    <option value="last">The last one</option>
+                                </select>
+                                <div class="help">
+                                    Only matters once you have narrowed the
+                                    columns above. “First” keeps the earliest row
+                                    and the survivor stays where that row was;
+                                    “last” keeps the latest and it stays where
+                                    that one was.
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="field">
+                            <label>Sort by</label>
+                            <div class="pick-list" id="sortPills"></div>
+                            <select id="sortAdd">
+                                <option value="">+ add a column to sort by</option>
+                            </select>
+                            <div class="help">
+                                Add as many as you like — the first one sorts,
+                                the rest break its ties in order. Click a pill to
+                                switch it between ascending and descending.
                             </div>
                         </div>
                     </div>

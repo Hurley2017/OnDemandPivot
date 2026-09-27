@@ -40,9 +40,10 @@
     const BOOL_FIELDS = ["optHasHeader", "optPromote", "optTranspose",
                          "optStrip", "optDropRows", "optDropRowsNull", "optDedupe",
                          "optDropCols", "optConstantCols", "optDuplicateCols",
-                         "optNormalizeCols", "optCoerceNumbers", "sortDesc"];
-    const SELECT_FIELDS = ["textCase", "fillMissing", "dedupeKeep", "sortBy"];
-    const TEXT_FIELDS = ["dataRange", "dropCols", "replaceFind", "replaceWith"];
+                         "optNormalizeCols", "optCoerceNumbers"];
+    const SELECT_FIELDS = ["textCase", "fillMissing", "dedupeKeep"];
+    const TEXT_FIELDS = ["dataRange", "dropCols", "dedupeCols",
+                         "replaceFind", "replaceWith"];
 
     /* control id -> backend option name */
     const OPTION_MAP = {
@@ -60,8 +61,7 @@
         optDropRowsNull: "drop_rows_with_null",
         optDedupe: "dedupe",
         dedupeKeep: "dedupe_keep",
-        sortBy: "sort_by",
-        sortDesc: "sort_desc",
+        dedupeCols: "dedupe_cols",
         optDropCols: "drop_empty_cols",
         optConstantCols: "drop_constant_cols",
         optDuplicateCols: "drop_duplicate_cols",
@@ -75,6 +75,15 @@
         replaceFind: "replace_find",
         replaceWith: "replace_with",
     };
+
+    /**
+     * The sort keys, in priority order: [{column, desc}, ...].
+     *
+     * Sorting by several columns cannot be expressed by one <select>, so this is
+     * its own small state: a picker adds a column, each pill toggles its own
+     * direction, and the order of the pills is the tie-break order.
+     */
+    let sortSpecs = [];
 
     function readOptions() {
         const payload = {};
@@ -94,6 +103,8 @@
         // The worksheet is chosen from its own panel rather than a control that
         // lives inside one of the option groups.
         payload.sheet = currentSheet();
+        // Sorting travels as ordered [column, direction] pairs.
+        payload.sort_by = sortSpecs.map((s) => [s.column, s.desc ? "desc" : "asc"]);
         return payload;
     }
 
@@ -105,7 +116,7 @@
                        "dataRange"],
         grpShape: ["optHasHeader", "optPromote", "optTranspose"],
         grpRows: ["optDropRows", "optDropRowsNull", "optDedupe", "dedupeKeep",
-                  "sortBy", "sortDesc"],
+                  "dedupeCols"],
         grpColumns: ["optDropCols", "optConstantCols", "optDuplicateCols",
                      "optNormalizeCols", "maxMissing", "dropCols"],
         grpValues: ["optStrip", "optCoerceNumbers", "textCase", "fillMissing",
@@ -152,6 +163,17 @@
                 el.value = el.defaultValue;
             }
         });
+
+        // Restoring a session or a fresh upload brings its sort keys with it.
+        sortSpecs = Array.isArray(opts.sort_by)
+            ? opts.sort_by
+                  .filter((s) => Array.isArray(s) && s[0])
+                  .map((s) => ({
+                      column: String(s[0]),
+                      desc: String(s[1] || "asc").toLowerCase() === "desc",
+                  }))
+            : [];
+
         window.CPA.refreshSelects();
     }
 
@@ -311,17 +333,17 @@
         fillColumnSelects(profile.fields.map((f) => f.name));
     }
 
-    /** Keep the column-dependent selects in step with the current frame. */
+    /**
+     * Keep the column-dependent controls in step with the current frame.
+     *
+     * Columns can disappear as the options are applied, so a sort key that no
+     * longer exists is dropped rather than left to fail silently.
+     */
     function fillColumnSelects(names) {
-        const sortBy = $("sortBy");
-        const current = sortBy.value;
-        sortBy.innerHTML =
-            '<option value="">— leave as-is —</option>' +
-            names
-                .map((n) => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`)
-                .join("");
-        if (names.includes(current)) sortBy.value = current;
-        window.CPA.refreshSelects();
+        const live = new Set(names);
+        const before = sortSpecs.length;
+        sortSpecs = sortSpecs.filter((s) => live.has(s.column));
+        if (sortSpecs.length !== before) renderSortPills();
     }
 
     function renderPreview(preview) {
@@ -368,9 +390,182 @@
         renderStats(data.profile);
         renderProfile(data.profile);
         renderPreview(data.preview);
+        columnNames = (data.profile.fields || []).map((f) => f.name);
+        renderSortPills();
         profileCard.hidden = false;
         previewCard.hidden = false;
         markModifiedGroups();
+    }
+
+    /* The frame's column names, refreshed on every rebuild. They drive the sort
+       picker and the suggestions in the text boxes. */
+    let columnNames = [];
+
+    /* ------------------------------------------------------------- sorting */
+
+    /**
+     * Draw the sort keys as ordered pills.
+     *
+     * One <select> cannot express "sort by these three, in this order, one of
+     * them descending", so the keys are pills: the first sorts, the rest break
+     * its ties in order, and each pill toggles its own direction when clicked.
+     */
+    function renderSortPills() {
+        const host = $("sortPills");
+        const picker = $("sortAdd");
+        if (!host || !picker) return;
+
+        host.textContent = "";
+        if (!sortSpecs.length) {
+            const empty = document.createElement("span");
+            empty.className = "pick-empty";
+            empty.textContent = "No sort — rows keep their file order.";
+            host.appendChild(empty);
+        }
+
+        sortSpecs.forEach((spec, index) => {
+            const pill = document.createElement("button");
+            pill.type = "button";
+            pill.className = "pick-pill" + (spec.desc ? " is-desc" : "");
+            pill.title = "Click to switch between ascending and descending";
+
+            const order = document.createElement("span");
+            order.className = "pick-order";
+            order.textContent = String(index + 1);
+            pill.appendChild(order);
+
+            const name = document.createElement("span");
+            name.className = "pick-name";
+            name.textContent = spec.column;
+            name.title = spec.column;
+            pill.appendChild(name);
+
+            const dir = document.createElement("span");
+            dir.className = "pick-dir";
+            dir.textContent = spec.desc ? "Z–A" : "A–Z";
+            pill.appendChild(dir);
+
+            pill.addEventListener("click", () => {
+                spec.desc = !spec.desc;
+                renderSortPills();
+                schedulePreview();
+            });
+
+            const drop = document.createElement("span");
+            drop.className = "pick-drop";
+            drop.textContent = "\u00d7";
+            drop.setAttribute("role", "button");
+            drop.setAttribute("aria-label", "Remove " + spec.column + " from the sort");
+            drop.addEventListener("click", (event) => {
+                event.stopPropagation();
+                sortSpecs.splice(index, 1);
+                renderSortPills();
+                schedulePreview();
+            });
+            pill.appendChild(drop);
+
+            host.appendChild(pill);
+        });
+
+        // Offer only what is not already a sort key.
+        const used = new Set(sortSpecs.map((s) => s.column));
+        const options = columnNames.filter((n) => !used.has(n));
+
+        picker.textContent = "";
+        const none = document.createElement("option");
+        none.value = "";
+        none.textContent = options.length
+            ? "+ add a column to sort by"
+            : "every column is already a sort key";
+        picker.appendChild(none);
+        options.forEach((name) => {
+            const opt = document.createElement("option");
+            opt.value = name;
+            opt.textContent = name;
+            picker.appendChild(opt);
+        });
+        picker.disabled = !options.length;
+        window.CPA.refreshSelects();
+    }
+
+    /* --------------------------------------------------------- suggestions */
+
+    /**
+     * Complete the token being typed in a comma-separated column box.
+     *
+     * Only the token under the caret is replaced, so "Account, Da" offers the
+     * columns beginning with "Da" and leaves "Account," alone. Matching ignores
+     * case, and columns already named in the box are not offered again.
+     */
+    function initSuggest(inputId) {
+        const input = $(inputId);
+        if (!input) return;
+
+        const wrap = input.parentElement;
+        wrap.style.position = "relative";
+        const panel = document.createElement("div");
+        panel.className = "suggest-panel";
+        panel.hidden = true;
+        wrap.appendChild(panel);
+
+        const close = () => { panel.hidden = true; };
+
+        const tokenAt = (value, caret) => {
+            const before = value.slice(0, caret);
+            const start = Math.max(
+                before.lastIndexOf(","),
+                before.lastIndexOf(";"),
+                before.lastIndexOf("\n")
+            ) + 1;
+            return { start, text: value.slice(start).trim() };
+        };
+
+        const refresh = () => {
+            const caret = input.selectionStart || input.value.length;
+            const { start, text } = tokenAt(input.value, caret);
+            if (!text) { close(); return; }
+
+            const used = new Set(
+                input.value.split(/[,\n;]/)
+                    .map((s) => s.trim().toLowerCase())
+                    .filter(Boolean)
+            );
+            const needle = text.toLowerCase();
+            const matches = columnNames
+                .filter((n) => n.toLowerCase().includes(needle))
+                .filter((n) => !used.has(n.toLowerCase()))
+                .slice(0, 8);
+            if (!matches.length) { close(); return; }
+
+            panel.textContent = "";
+            matches.forEach((name) => {
+                const item = document.createElement("button");
+                item.type = "button";
+                item.className = "suggest-item";
+                item.textContent = name;
+                // mousedown, not click: the input's blur would close the panel
+                // before a click ever landed.
+                item.addEventListener("mousedown", (event) => {
+                    event.preventDefault();
+                    const at = input.selectionStart || input.value.length;
+                    const tail = input.value.slice(at);
+                    input.value = input.value.slice(0, start) + name + tail;
+                    input.focus();
+                    close();
+                    input.dispatchEvent(new Event("input", { bubbles: true }));
+                    input.dispatchEvent(new Event("change", { bubbles: true }));
+                });
+                panel.appendChild(item);
+            });
+            panel.hidden = false;
+        };
+
+        input.addEventListener("input", refresh);
+        input.addEventListener("focus", refresh);
+        input.addEventListener("keydown", (event) => {
+            if (event.key === "Escape") close();
+        });
+        input.addEventListener("blur", () => setTimeout(close, 140));
     }
 
     /** Hide everything that only exists once a file is loaded. */
@@ -609,6 +804,17 @@
         e.stopPropagation(); // the drop zone behind it opens the file picker
         clearFile();
     });
+
+    // Sorting: the picker appends a key, the pills own the rest.
+    $("sortAdd").addEventListener("change", (event) => {
+        const name = event.target.value;
+        if (!name) return;
+        sortSpecs.push({ column: name, desc: false });
+        renderSortPills();
+        schedulePreview();
+    });
+    initSuggest("dropCols");
+    initSuggest("dedupeCols");
 
     $("resetBtn").addEventListener("click", () => {
         applyOptions(null);

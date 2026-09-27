@@ -305,16 +305,22 @@ const SHELF_LABELS = {
     values: "Values",
 };
 
-/** Which shelves a column may be dropped on. */
-function shelfAccepts(shelf, column) {
-    const isNumeric = state.numeric.includes(column);
-    if (shelf === "values") return isNumeric;
-    // Grouping axes are meaningful for text and dates, not measures.
-    return !isNumeric || shelf === "group";
+/**
+ * Which shelves a column may be dropped on.
+ *
+ * Everything goes anywhere. A number on a grouping axis is a legitimate
+ * grouping — by year, by price band — and a text or date column on Values is a
+ * count. Refusing them made the pane feel broken for no benefit: the aggregate
+ * picker already offers only what each column can actually do.
+ */
+function shelfAccepts() {
+    return true;
 }
 
-/** The aggregate a value column should use when first dropped. */
+/** The aggregate a column should use when first dropped on Values. */
 function defaultAggregate(column) {
+    // Numbers add up; text and dates are counted. Both are what a person
+    // expects, and both are changeable from the chip.
     return state.numeric.includes(column) ? "sum" : "count";
 }
 
@@ -622,29 +628,98 @@ function buildFilterRow(cond, index) {
             return;
         }
 
-        const picker = document.createElement("select");
-        const any = document.createElement("option");
-        any.value = "";
-        any.textContent = "(Any)";
-        picker.appendChild(any);
+        // Excel's filter: a tick list of the values present, with "All" on top.
+        // One value is sent as a plain equality; several go as an `in` list, so
+        // a single tick behaves exactly as before.
+        const selected = new Set(
+            Array.isArray(cond[2]) ? cond[2].map(String)
+                : cond[2] === "" || cond[2] === undefined || cond[2] === null
+                    ? []
+                    : [String(cond[2])]
+        );
 
-        data.values.forEach((v) => {
-            const opt = document.createElement("option");
-            opt.value = String(v);
-            opt.textContent = String(v);
-            picker.appendChild(opt);
-        });
+        const list = document.createElement("div");
+        list.className = "value-list";
+
+        const push = (label, value, checked) => {
+            const row = document.createElement("label");
+            row.className = "value-option";
+            const box = document.createElement("input");
+            box.type = "checkbox";
+            box.checked = checked;
+            box.dataset.value = value;
+            const text = document.createElement("span");
+            text.textContent = label;
+            row.appendChild(box);
+            row.appendChild(text);
+            list.appendChild(row);
+            return box;
+        };
+
+        const all = push("All", "", selected.size === 0);
+        const boxes = data.values.map((v) =>
+            push(String(v), String(v), selected.has(String(v)))
+        );
         if (data.has_blanks) {
-            const opt = document.createElement("option");
-            opt.value = "";
-            opt.textContent = "(Blanks)";
-            picker.appendChild(opt);
+            boxes.push(push("(Blanks)", "", selected.has("")));
         }
 
-        picker.value = cond[2] === undefined || cond[2] === null
-            ? "" : String(cond[2]);
-        picker.addEventListener("change", () => commit(picker.value));
-        host.appendChild(picker);
+        const commitSelection = () => {
+            const picked = [];
+            let blanks = false;
+            list.querySelectorAll("input[type=checkbox]").forEach((box) => {
+                if (!box.checked || box === all) return;
+                if (box.dataset.value === "") blanks = true;
+                else picked.push(box.dataset.value);
+            });
+            // Blank means "no restriction", which is a draft: shown, not applied.
+            if (!picked.length && !blanks) {
+                state.filter[index] = [column.value, op.value, ""];
+            } else if (picked.length === 1 && !blanks) {
+                const raw = picked[0];
+                const asNumber = Number(raw);
+                state.filter[index] = [
+                    column.value,
+                    op.value === "in" ? "==" : op.value,
+                    !Number.isNaN(asNumber) && state.numeric.includes(column.value)
+                        ? asNumber
+                        : raw,
+                ];
+            } else {
+                state.filter[index] = [column.value, "in", picked];
+            }
+            renderFilterSummary();
+            refreshView();
+        };
+
+        list.querySelectorAll("input[type=checkbox]").forEach((box) => {
+            box.addEventListener("change", () => {
+                if (box === all) {
+                    // "All" clears everything else.
+                    boxes.forEach((b) => { b.checked = false; });
+                    box.checked = true;
+                } else {
+                    all.checked = false;
+                }
+                commitSelection();
+            });
+        });
+
+        host.appendChild(list);
+    };
+
+    /** The one-line summary shown above the tick list. */
+    const renderFilterSummary = () => {
+        const summary = host.parentElement.querySelector(".value-summary");
+        if (!summary) return;
+        const value = state.filter[index] ? state.filter[index][2] : "";
+        if (Array.isArray(value)) {
+            summary.textContent = value.length + " selected";
+        } else if (value === "" || value === undefined || value === null) {
+            summary.textContent = "All";
+        } else {
+            summary.textContent = String(value);
+        }
     };
 
     paintValue(null);
@@ -952,15 +1027,10 @@ function initFields() {
 
                 if (chip && chip.dataset.shelf === shelf) {
                     moveToShelf(shelf, column, index);
-                } else if (shelfAccepts(shelf, column)) {
-                    moveToShelf(shelf, column, index);
                 } else {
-                    toast(
-                        shelf === "values"
-                            ? `${column} is not a measure — Values only takes numbers.`
-                            : `${column} is a measure — put it on Values instead.`,
-                        "warn"
-                    );
+                    // Every shelf takes every column; the chip's aggregate
+                    // picker offers only what that column can actually do.
+                    moveToShelf(shelf, column, index);
                 }
             });
         });
@@ -1864,7 +1934,7 @@ function renderKpiList(profile) {
                     <span class="badge ${badge}">${escapeHtml(f.kind)}</span>
                 </div>
                 <div class="kpi-meta">
-                    <span>${escapeHtml(f.dtype)}</span>
+                    <span>${escapeHtml(f.excel || "Text")}</span>
                     <span${f.missing ? ' class="warn"' : ""}>${escapeHtml(missingTxt)}</span>
                     <span><b>${escapeHtml(f.unique)}</b> distinct</span>
                 </div>
@@ -1895,8 +1965,9 @@ function selectKpi(name) {
 
     const s = field.stats || {};
     const rows = [
-        ["Data type", field.dtype],
-        ["Kind", field.kind],
+        // Excel's own vocabulary, the same as the import page's profile table.
+        // "str / float64" means nothing to the person reading it.
+        ["Data type", field.excel || "Text"],
         ["Missing values", `${field.missing} (${field.missing_pct}%)`],
         ["Distinct values", field.unique],
     ];
