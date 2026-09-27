@@ -655,6 +655,19 @@
             throw new Error(data.error || "Upload failed.");
         }
 
+        // A shared view arrives already structured and already configured, so
+        // there is nothing to prepare here — go straight to it.
+        if (data.shared) {
+            toast(
+                data.view && data.view.note
+                    ? `Opening the shared view — “${data.view.note}”.`
+                    : "Opening the shared view.",
+                "success"
+            );
+            window.location.href = "/dashboard";
+            return;
+        }
+
         renderSheets(data.sheets, data.options && data.options.sheet);
         applyOptions(data.options);
         renderAll(data);
@@ -694,8 +707,10 @@
         if (!file) return;
 
         const ext = (file.name.split(".").pop() || "").toLowerCase();
-        if (ext !== "csv" && ext !== "xlsx" && ext !== "xlsb") {
-            toast("Unsupported file type. Choose a .csv, .xlsx or .xlsb file.", "error");
+        if (ext !== "csv" && ext !== "xlsx" && ext !== "xlsb"
+                && ext !== "pivotview") {
+            toast("Unsupported file type. Choose a .csv, .xlsx, .xlsb or "
+                  + ".pivotview file.", "error");
             return;
         }
 

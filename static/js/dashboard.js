@@ -2798,6 +2798,53 @@ window.addEventListener("error", (event) => {
     }
 });
 
+/**
+ * Adopt the view that arrived with a shared file, if there was one.
+ *
+ * The file carries a complete config, so it replaces whatever the default is —
+ * this is what makes the recipient land on the sender's view rather than on a
+ * flat grid.
+ */
+async function applySharedView() {
+    let data = null;
+    try {
+        const resp = await fetch("/api/shared");
+        if (!resp.ok) return false;
+        data = await resp.json();
+    } catch (_err) {
+        return false;
+    }
+    if (!data || !data.shared) return false;
+
+    const shared = data.shared;
+    if (Array.isArray(shared.palette) && shared.palette.length >= 2) {
+        state.palette = shared.palette;
+        paintViewer($("viewer"), state.palette);
+    }
+
+    const config = shared.config || {};
+    if (config.plugin) state.plugin = config.plugin;
+    syncToolbarFromConfig(config);
+
+    const next = {
+        ...viewOnlyConfig(config),
+        plugin: config.plugin || "Datagrid",
+        table: TABLE_NAME,
+        columns_config: config.columns_config,
+        group_rollup_mode: config.group_rollup_mode || "rollup",
+        split_rollup_mode: config.split_rollup_mode || "rollup",
+    };
+    await applyConfig(next);
+    markActiveView();
+
+    if (shared.note) {
+        toast(`Shared view — “${shared.note}”. Everything is editable.`, "info");
+    } else {
+        toast("Shared view opened. Everything is editable.", "info");
+    }
+    return true;
+}
+
 async function main() {
     window.CPA.initCollapsibles();
     window.CPA.initGroupBar();
@@ -2818,6 +2865,7 @@ async function main() {
         $("fieldsBtn").click();
         await renderViewSelect();
         await loadPerspective();
+        await applySharedView();
         renderFieldList();
         renderShelves();
         renderRules();
