@@ -322,7 +322,6 @@
                 <tr>
                     <td><b>${escapeHtml(f.name)}</b></td>
                     <td><span class="badge ${badge}">${escapeHtml(excel)}</span></td>
-                    <td>${escapeHtml(f.dtype)}</td>
                     <td class="${f.missing ? "num null" : "num"}">${escapeHtml(missingTxt)}</td>
                     <td class="num">${escapeHtml(f.unique)}</td>
                     <td>${issues}</td>
