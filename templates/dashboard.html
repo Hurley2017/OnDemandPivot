@@ -137,6 +137,52 @@
                 title="Show or hide the field list and shelves">
             Show Fields
         </button>
+        <div class="palette-wrap">
+            <button class="btn btn-ghost btn-sm" id="shareBtn" type="button"
+                    aria-haspopup="dialog" aria-expanded="false"
+                    title="Send this view to a colleague">
+                Share
+            </button>
+            <div class="palette-panel share-panel" id="sharePanel" hidden
+                 role="dialog" aria-label="Share this view">
+                <div class="palette-head">Share this view</div>
+
+                <label class="check-row share-row">
+                    <input type="checkbox" id="shareEditable" checked>
+                    <span>
+                        <b>Editable view</b> — <code>.pivotview</code><br>
+                        <small>A colleague with the app opens it, gets your
+                            view, and can change anything.</small>
+                    </span>
+                </label>
+
+                <label class="check-row share-row">
+                    <input type="checkbox" id="shareHtml" checked>
+                    <span>
+                        <b>Standalone page</b> — <code>.html</code><br>
+                        <small>Opens in any browser, no app needed. Shows the
+                            numbers and the chart as you see them.</small>
+                    </span>
+                </label>
+
+                <div class="field share-note">
+                    <label for="shareNote">Note <span class="tag">optional</span></label>
+                    <input id="shareNote" type="text" autocomplete="off"
+                           spellcheck="false" placeholder="Q3 by segment, for review">
+                </div>
+
+                <p class="palette-note" id="shareWarning">
+                    The editable view carries the whole table, not just what is on
+                    screen. The standalone page carries only the numbers shown.
+                </p>
+
+                <div class="chat-config-actions">
+                    <button class="btn btn-primary btn-sm" id="shareGo" type="button">
+                        Share
+                    </button>
+                </div>
+            </div>
+        </div>
         <button class="btn btn-ghost btn-sm" id="resetBtn" type="button">
             Reset
         </button>

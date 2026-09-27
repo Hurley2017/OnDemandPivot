@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ title }}</title>
+<!--
+  A shared view, standing on its own.
+
+  Everything needed to read it is in this file: the data, the colours and the
+  renderer. No network, no server, no install. It is deliberately read-only —
+  sorting and the chart are here, but the view cannot be reshaped, because the
+  whole dataframe is not in the file, only what was on screen.
+-->
+<style>
+  :root {
+    --ink: #1a1a1a;
+    --grey-600: #666666;
+    --grey-400: #999999;
+    --grey-200: #e2e2e2;
+    --grey-100: #f2f2f2;
+    --grey-050: #fafafa;
+    --primary: {{ colours[0] }};
+    --font: "HSBC Sans", "Segoe UI", system-ui, -apple-system, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 24px;
+    background: var(--grey-100);
+    color: var(--ink);
+    font-family: var(--font);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding-bottom: 12px;
+    margin-bottom: 4px;
+    border-bottom: 3px solid var(--primary);
+  }
+  .mark {
+    width: 34px; height: 34px; flex: 0 0 auto;
+    background: var(--primary);
+    clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+  }
+  h1 { margin: 0; font-size: 17px; }
+  .sub { font-size: 12px; color: var(--grey-600); }
+  .card {
+    background: #fff;
+    border: 1px solid var(--grey-200);
+    border-radius: 6px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.07);
+    margin-top: 16px;
+    overflow: hidden;
+  }
+  .card-head {
+    display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+    padding: 11px 16px;
+    border-bottom: 1px solid var(--grey-200);
+    font-size: 10.5px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .09em;
+    color: var(--grey-600);
+  }
+  .card-head b { color: var(--ink); }
+  .note {
+    margin: 16px 0 0;
+    padding: 12px 16px;
+    background: #fff;
+    border: 1px solid var(--grey-200);
+    border-left: 3px solid var(--primary);
+    border-radius: 4px;
+    font-size: 13px;
+  }
+  .note .who { font-size: 11px; color: var(--grey-600); margin-top: 6px; }
+  ul.prep { margin: 8px 0 0; padding-left: 18px; font-size: 12px; color: var(--grey-600); }
+  .scroll { max-height: 62vh; overflow: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 12.5px; white-space: nowrap; }
+  thead th {
+    position: sticky; top: 0; z-index: 2;
+    background: var(--primary); color: #fff;
+    text-align: left; font-weight: 700; font-size: 10.5px;
+    letter-spacing: .08em; text-transform: uppercase;
+    padding: 9px 12px;
+    border-right: 1px solid rgba(255,255,255,.18);
+    cursor: pointer; user-select: none;
+  }
+  thead th .dir { opacity: .75; font-size: 9px; margin-left: 4px; }
+  tbody td {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--grey-200);
+    border-right: 1px solid var(--grey-100);
+  }
+  tbody tr:nth-child(even) { background: var(--grey-050); }
+  tbody tr:hover { background: rgba(0,0,0,.03); }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.null { color: var(--grey-400); font-style: italic; }
+  .chart { padding: 18px; }
+  .foot { margin-top: 18px; font-size: 11.5px; color: var(--grey-600); }
+  @media (max-width: 760px) { body { padding: 12px; } }
+</style>
+</head>
+<body>
+
+<header>
+  <span class="mark" aria-hidden="true"></span>
+  <div>
+    <h1>{% if source %}{{ source }}{% else %}Shared view{% endif %}</h1>
+    <div class="sub">{{ plugin }} &middot; shared {{ made }}</div>
+  </div>
+</header>
+
+{% if note %}
+<div class="note">
+  {{ note }}
+  <div class="who">Sent {{ made }}{% if source %} with {{ source }}{% endif %}.</div>
+  {% if reshaped %}
+  <ul class="prep">
+    {% for step in reshaped %}<li>{{ step }}</li>{% endfor %}
+  </ul>
+  {% endif %}
+</div>
+{% endif %}
+
+{% if is_chart %}
+<div class="card">
+  <div class="card-head">Chart <b>{{ plugin }}</b></div>
+  <div class="chart"><svg id="chart" width="100%" height="360"
+       role="img" aria-label="Shared chart"></svg></div>
+</div>
+{% endif %}
+
+<div class="card">
+  <div class="card-head">
+    The numbers
+    <b id="count"></b>
+    <span style="margin-left:auto;text-transform:none;letter-spacing:0;font-weight:400">
+      Click a heading to sort
+    </span>
+  </div>
+  <div class="scroll">
+    <table id="grid">
+      <thead><tr id="head"></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
+<p class="foot">
+  This file is complete on its own — it needs no internet connection.
+  It is a read-only snapshot, so the data cannot be reshaped here.
+</p>
+
+<script>
+const COLUMNS = {{ columns_json|safe }};
+const ROWS = {{ rows_json|safe }};
+const COLOURS = {{ colours_json|safe }};
+const GROUPS = {{ group_json|safe }};
+const MEASURES = {{ measures_json|safe }};
+const IS_CHART = {{ 'true' if is_chart else 'false' }};
+
+let sortKey = null;
+let sortDesc = false;
+
+const isNum = (v) => typeof v === 'number' && isFinite(v);
+
+function cell(value) {
+  const td = document.createElement('td');
+  if (value === null || value === undefined) {
+    td.className = 'null';
+    td.textContent = '-';
+  } else if (isNum(value)) {
+    td.className = 'num';
+    td.textContent = value.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  } else {
+    td.textContent = String(value);
+  }
+  return td;
+}
+
+function renderHead() {
+  const tr = document.getElementById('head');
+  tr.textContent = '';
+  COLUMNS.forEach((name) => {
+    const th = document.createElement('th');
+    th.textContent = name;
+    if (sortKey === name) {
+      const d = document.createElement('span');
+      d.className = 'dir';
+      d.textContent = sortDesc ? 'Z-A' : 'A-Z';
+      th.appendChild(d);
+    }
+    th.addEventListener('click', () => {
+      if (sortKey === name) { sortDesc = !sortDesc; }
+      else { sortKey = name; sortDesc = false; }
+      render();
+    });
+    tr.appendChild(th);
+  });
+}
+
+function sortedRows() {
+  if (!sortKey) return ROWS;
+  const copy = ROWS.slice();
+  copy.sort((a, b) => {
+    const x = a[sortKey], y = b[sortKey];
+    if (x === null || x === undefined) return 1;
+    if (y === null || y === undefined) return -1;
+    const cmp = isNum(x) && isNum(y) ? x - y
+      : String(x).localeCompare(String(y), undefined, { numeric: true });
+    return sortDesc ? -cmp : cmp;
+  });
+  return copy;
+}
+
+function renderTable() {
+  const body = document.querySelector('#grid tbody');
+  body.textContent = '';
+  const rows = sortedRows();
+  document.getElementById('count').textContent =
+    rows.length.toLocaleString() + ' rows x ' + COLUMNS.length + ' columns';
+  const frag = document.createDocumentFragment();
+  rows.forEach((row) => {
+    const tr = document.createElement('tr');
+    COLUMNS.forEach((name) => tr.appendChild(cell(row[name])));
+    frag.appendChild(tr);
+  });
+  body.appendChild(frag);
+}
+
+/* A plain SVG chart: enough to show the shape of the view without pulling in a
+   charting library, which would have to be carried in this file too. */
+function renderChart() {
+  const svg = document.getElementById('chart');
+  if (!svg) return;
+  const labels = ROWS.map((r) => String(r[GROUPS[0]] ?? ''));
+  const series = MEASURES.filter((m) => ROWS.some((r) => isNum(r[m])));
+  if (!labels.length || !series.length) {
+    svg.innerHTML = '<text x="12" y="28" fill="#999">Nothing to plot.</text>';
+    return;
+  }
+
+  const W = svg.clientWidth || 900, H = 360;
+  const PAD = { t: 18, r: 18, b: 76, l: 68 };
+  const innerW = W - PAD.l - PAD.r;
+  const innerH = H - PAD.t - PAD.b;
+
+  let max = -Infinity, min = 0;
+  ROWS.forEach((r) => series.forEach((m) => {
+    const v = r[m];
+    if (isNum(v)) { max = Math.max(max, v); min = Math.min(min, v); }
+  }));
+  if (max === min) max = min + 1;
+  const y = (v) => PAD.t + innerH - ((v - min) / (max - min)) * innerH;
+
+  const groupW = innerW / labels.length;
+  const barW = Math.max(1, (groupW * 0.72) / series.length);
+  const parts = [];
+
+  parts.push(`<line x1="${PAD.l}" y1="${y(0)}" x2="${W - PAD.r}" y2="${y(0)}"
+              stroke="#c8c8c8"/>`);
+  [min, max].forEach((v) => {
+    parts.push(`<text x="${PAD.l - 8}" y="${y(v) + 4}" text-anchor="end"
+                font-size="10" fill="#666">${
+                Number(v).toLocaleString(undefined, { maximumFractionDigits: 1 })}</text>`);
+  });
+
+  ROWS.forEach((row, i) => {
+    series.forEach((m, s) => {
+      const v = row[m];
+      if (!isNum(v)) return;
+      const x = PAD.l + i * groupW + groupW * 0.14 + s * barW;
+      const top = Math.min(y(v), y(0));
+      const h = Math.max(1, Math.abs(y(v) - y(0)));
+      parts.push(`<rect x="${x.toFixed(1)}" y="${top.toFixed(1)}" width="${barW.toFixed(1)}"
+                  height="${h.toFixed(1)}" fill="${COLOURS[s % COLOURS.length]}"><title>${
+                  labels[i]} · ${m} · ${Number(v).toLocaleString()}</title></rect>`);
+    });
+    if (groupW > 26) {
+      parts.push(`<text x="${(PAD.l + i * groupW + groupW / 2).toFixed(1)}"
+                  y="${H - PAD.b + 14}" text-anchor="end" font-size="10" fill="#666"
+                  transform="rotate(-40 ${(PAD.l + i * groupW + groupW / 2).toFixed(1)} ${H - PAD.b + 14})"
+                  >${labels[i].replace(/[<&]/g, '')}</text>`);
+    }
+  });
+
+  series.forEach((m, s) => {
+    parts.push(`<rect x="${PAD.l + s * 130}" y="${H - 18}" width="10" height="10"
+                fill="${COLOURS[s % COLOURS.length]}"/>`);
+    parts.push(`<text x="${PAD.l + 16 + s * 130}" y="${H - 9}" font-size="11"
+                fill="#666">${m}</text>`);
+  });
+
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.innerHTML = parts.join('');
+}
+
+function render() { renderHead(); renderTable(); }
+render();
+if (IS_CHART) renderChart();
+window.addEventListener('resize', () => { if (IS_CHART) renderChart(); });
+</script>
+</body>
+</html>

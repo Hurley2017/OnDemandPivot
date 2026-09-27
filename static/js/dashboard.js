@@ -266,6 +266,126 @@ function buildToolbar() {
     $("downloadBtn").addEventListener("click", downloadCurrentView);
 }
 
+/* --------------------------------------------------------------- sharing */
+
+/**
+ * Share the current view.
+ *
+ * Two files, both from the same dialog: an editable .pivotview for a colleague
+ * who has the app, and a standalone .html for anyone else. They carry different
+ * things — the package carries the whole structured frame, the page carries
+ * only the numbers on screen — and the dialog says so, because "share my view"
+ * and "share my dataset" are not the same act.
+ */
+function initShare() {
+    const btn = $("shareBtn");
+    const panel = $("sharePanel");
+    if (!btn || !panel) return;
+
+    const close = () => {
+        panel.hidden = true;
+        btn.setAttribute("aria-expanded", "false");
+    };
+
+    btn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        panel.hidden = !panel.hidden;
+        btn.setAttribute("aria-expanded", panel.hidden ? "false" : "true");
+    });
+    panel.addEventListener("click", (event) => event.stopPropagation());
+    document.addEventListener("click", close);
+
+    const stamp = () => new Date().toISOString().slice(0, 10);
+
+    const download = (blob, fallback) => {
+        // The server names the file; fall back if the header is unreadable.
+        saveBlob(blob, fallback);
+    };
+
+    $("shareGo").addEventListener("click", async () => {
+        const wantEditable = $("shareEditable").checked;
+        const wantHtml = $("shareHtml").checked;
+        if (!wantEditable && !wantHtml) {
+            toast("Tick at least one kind of share.", "warn");
+            return;
+        }
+        if (!state.ready) {
+            toast("The view is not ready yet.", "warn");
+            return;
+        }
+
+        const note = ($("shareNote").value || "").trim();
+        const colors = state.palette || PALETTES[0].colors;
+        const stem = `${state.plugin.replace(/[^\w]+/g, "-")}-${stamp()}`;
+        let count = 0;
+
+        try {
+            if (wantEditable) {
+                const resp = await fetch("/api/share/view", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        note,
+                        config: viewConfigFrom(await $("viewer").save()),
+                        palette: colors,
+                    }),
+                });
+                if (!resp.ok) throw new Error(await errorText(resp));
+                saveBlob(await resp.blob(), `shared-view-${stem}.pivotview`);
+                count += 1;
+            }
+
+            if (wantHtml) {
+                // The page carries the view's own output, so the Arrow is taken
+                // from a view of the current config rather than the dataset.
+                const table = await $("viewer").getTable();
+                const view = await table.view(viewOnlyConfig(await $("viewer").save()));
+                let arrow;
+                try {
+                    arrow = await view.to_arrow();
+                } finally {
+                    try { await view.delete(); } catch (_err) { /* gone */ }
+                }
+                const query =
+                    "?plugin=" + encodeURIComponent(state.plugin) +
+                    "&note=" + encodeURIComponent(note) +
+                    "&config=" + encodeURIComponent(
+                        JSON.stringify(viewConfigFrom(await $("viewer").save()))) +
+                    "&palette=" + encodeURIComponent(JSON.stringify(colors));
+                const resp = await fetch("/api/share/html" + query, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/vnd.apache.arrow.stream" },
+                    body: arrow,
+                });
+                if (!resp.ok) throw new Error(await errorText(resp));
+                saveBlob(await resp.blob(), `shared-view-${stem}.html`);
+                count += 1;
+            }
+
+            close();
+            toast(
+                count === 2
+                    ? "Shared: an editable view and a standalone page."
+                    : "Shared.",
+                "success"
+            );
+        } catch (err) {
+            toast((err && err.message) || "Could not build the share.", "error");
+        }
+    });
+}
+
+/** Pull the server's explanation out of a failed response. */
+async function errorText(resp) {
+    try {
+        const data = await resp.json();
+        if (data && data.error) return data.error;
+    } catch (_err) {
+        /* not JSON */
+    }
+    return `The server returned ${resp.status}.`;
+}
+
 /* ------------------------------------------------------- fields panel */
 
 /**
@@ -2692,6 +2812,7 @@ async function main() {
         buildToolbar();
         initFields();
         initResizer();
+        initShare();
         // The fields pane is where the report is built, so it starts open —
         // the same way Excel's PivotTable Fields does.
         $("fieldsBtn").click();

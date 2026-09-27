@@ -50,6 +50,8 @@ DEFAULT_PORT = 5000
 APP_NAME = "Client Profitability Analytics"
 
 ALLOWED_EXTENSIONS = {".csv", ".xlsx", ".xlsb"}
+# A shared view is a zip carrying the frame and the view config.
+SHARED_EXTENSIONS = {".pivotview"}
 # Excel formats we can open, and the pandas engine each one needs.
 EXCEL_ENGINES = {".xlsx": "openpyxl", ".xlsb": "pyxlsb"}
 UPLOAD_DIR = os.path.join(tempfile.gettempdir(), "ondemandpivot")
@@ -65,6 +67,141 @@ EXCEL_BANDING_BUDGET = 120_000
 
 # What the exported workbook looks like when the caller names no colour.
 EXCEL_DEFAULT_PRIMARY = "#db0011"
+
+
+VIEW_FORMAT = "ondemandpivot-view"
+VIEW_VERSION = 1
+
+
+def _reshape_summary(options: dict) -> list:
+    """
+    What was done to the data on the way in, in plain words.
+
+    A recipient opens a shared view without the source workbook, so this is the
+    only account of how the frame they are holding came to look like it does.
+    """
+    notes = []
+
+    def add(flag, text):
+        if options.get(flag):
+            notes.append(text)
+
+    if options.get("sheet"):
+        notes.append(f"read worksheet “{options['sheet']}”")
+    if options.get("skip_rows"):
+        notes.append(f"skipped the first {options['skip_rows']} row(s)")
+    if options.get("skip_last_rows"):
+        notes.append(f"skipped the last {options['skip_last_rows']} row(s)")
+    if options.get("skip_cols"):
+        notes.append(f"skipped the first {options['skip_cols']} column(s)")
+    if options.get("skip_last_cols"):
+        notes.append(f"skipped the last {options['skip_last_cols']} column(s)")
+    if options.get("data_range"):
+        notes.append(f"limited to the range {options['data_range']}")
+    if options.get("has_header") is False:
+        notes.append("used the first row as data, not a header")
+    add("transpose", "transposed rows and columns")
+    add("drop_empty_rows", "dropped empty rows")
+    add("drop_rows_with_null", "dropped rows with any empty value")
+    add("drop_empty_cols", "dropped empty columns")
+    add("drop_constant_cols", "dropped constant columns")
+    add("drop_duplicate_cols", "dropped duplicate columns")
+    if options.get("drop_cols"):
+        notes.append(f"dropped columns: {options['drop_cols']}")
+    if options.get("dedupe"):
+        where = options.get("dedupe_cols") or "every column"
+        keep = "the last" if options.get("dedupe_keep") == "last" else "the first"
+        notes.append(f"removed duplicate rows, comparing {where}, keeping {keep}")
+    if options.get("normalize_col_names"):
+        notes.append("normalised column names")
+    if options.get("strip_whitespace"):
+        notes.append("trimmed whitespace")
+    if options.get("coerce_numbers"):
+        notes.append("converted text-formatted numbers")
+    if options.get("text_case") and options["text_case"] != "none":
+        notes.append(f"set text to {options['text_case']} case")
+    if options.get("fill_missing") and options["fill_missing"] != "none":
+        notes.append(f"filled missing values ({options['fill_missing']})")
+    if options.get("round_decimals", -1) >= 0:
+        notes.append(f"rounded to {options['round_decimals']} decimals")
+    if options.get("replace_find"):
+        notes.append(f"replaced “{options['replace_find']}”")
+    if options.get("sort_by"):
+        keys = ", ".join(
+            f"{c} {'desc' if str(d).lower() == 'desc' else 'asc'}"
+            for c, d in (
+                s if isinstance(s, (list, tuple)) else (s, "asc")
+                for s in options["sort_by"]
+            )
+        )
+        notes.append(f"sorted by {keys}")
+    return notes
+
+
+def _view_package_bytes(frame, config, note, palette) -> bytes:
+    """
+    The .pivotview package: the structured frame plus everything needed to
+    reopen the view on another machine.
+
+    A zip rather than one JSON because the Arrow payload is binary: this keeps
+    the data exact and lets the package compress.
+    """
+    import zipfile
+
+    profile = SESSION_DATA.get("profile") or {}
+    meta = {
+        "format": VIEW_FORMAT,
+        "version": VIEW_VERSION,
+        "created": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "note": (note or "").strip(),
+        "source": {
+            "filename": SESSION_DATA.get("display_name")
+            or SESSION_DATA.get("filename") or "",
+            "sheet": (SESSION_DATA.get("options") or {}).get("sheet", ""),
+            "rows": int(len(frame)) if frame is not None else 0,
+            "cols": int(frame.shape[1]) if frame is not None else 0,
+            "source_rows": profile.get("source_rows"),
+            "source_cols": profile.get("source_cols"),
+        },
+        "reshaped": _reshape_summary(SESSION_DATA.get("options") or {}),
+        "palette": palette or [],
+        "config": config or {},
+    }
+
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("view.json", json.dumps(meta, indent=2))
+        if frame is not None:
+            zf.writestr("data.arrow", _df_to_arrow_stream(frame))
+    return buffer.getvalue()
+
+
+def _read_view_package(path) -> tuple:
+    """
+    Unpack a .pivotview into (frame, meta), or (None, None) if it is not one.
+
+    Detection is by content, not by extension: a zip carrying view.json is a
+    shared view whatever it happens to be called.
+    """
+    import zipfile
+
+    try:
+        with zipfile.ZipFile(path) as zf:
+            names = zf.namelist()
+            if "view.json" not in names:
+                return None, None
+            meta = json.loads(zf.read("view.json").decode("utf-8"))
+            if meta.get("format") != VIEW_FORMAT:
+                return None, None
+            if "data.arrow" not in names:
+                return None, None
+            frame = pa.ipc.open_stream(zf.read("data.arrow")).read_all()
+    except Exception:  # noqa: BLE001
+        return None, None
+
+    if meta.get("version", 0) > VIEW_VERSION:
+        return None, None
+    return frame.to_pandas(), meta
 
 
 def _excel_theme(primary, gradient=False, low=None, high=None):
@@ -1579,6 +1716,67 @@ def index():
     return render_template("index.html")
 
 
+def _accept_shared_view(path, filename, display_name, frame, meta):
+    """
+    Adopt a shared view as the session's dataset.
+
+    Everything downstream — the profile, the KPI panel, Arrow to the browser —
+    works unchanged, because to the rest of the app this is simply a processed
+    frame that arrived a different way.
+    """
+    frame = frame.reset_index(drop=True)
+    frame = _infer_excel_serial_dates(frame.copy())
+    frame = _infer_datetimes(frame)
+
+    try:
+        profile = _build_profile(frame, SESSION_DATA.get("display_name"))
+    except Exception as exc:  # noqa: BLE001
+        return _err(f"Could not profile the shared view: {exc}", 422)
+
+    source = (meta.get("source") or {})
+    SESSION_DATA.update({
+        "path": path,
+        "filename": filename,
+        "display_name": source.get("filename") or display_name,
+        "sheets": [],
+        "raw_df": frame,
+        "df": frame,
+        "processed_df": frame,
+        "options": dict(DEFAULT_OPTIONS),
+        "profile": profile,
+        "source_shape": [int(source.get("source_rows") or len(frame)),
+                         int(source.get("source_cols") or frame.shape[1])],
+        "shared_view": {
+            "config": meta.get("config") or {},
+            "palette": meta.get("palette") or [],
+            "note": meta.get("note") or "",
+            "created": meta.get("created") or "",
+            "reshaped": meta.get("reshaped") or [],
+            "source": source,
+        },
+    })
+
+    return jsonify({
+        "success": True,
+        "shared": True,
+        "filename": SESSION_DATA["display_name"],
+        "profile": profile,
+        "preview": _df_preview(frame),
+        "options": SESSION_DATA["options"],
+        "sheets": [],
+        "view": SESSION_DATA["shared_view"],
+    })
+
+
+@app.route("/api/shared")
+def api_shared():
+    """The view carried by a shared file, if the open dataset came from one."""
+    return jsonify({
+        "success": True,
+        "shared": SESSION_DATA.get("shared_view") or None,
+    })
+
+
 @app.route("/upload", methods=["POST"])
 def upload():
     """
@@ -1591,8 +1789,10 @@ def upload():
         return _err("No file selected.")
 
     ext = os.path.splitext(file.filename)[1].lower()
-    if ext not in ALLOWED_EXTENSIONS:
-        return _err("Only .csv, .xlsx and .xlsb files are supported.")
+    # A shared view is a zip, and is recognised by its content rather than its
+    # name, so it does not matter what a mail gateway did to the extension.
+    if ext not in ALLOWED_EXTENSIONS and ext not in SHARED_EXTENSIONS:
+        return _err("Only .csv, .xlsx, .xlsb and .pivotview files are supported.")
 
     display_name = os.path.basename(file.filename)
     filename = secure_filename(file.filename) or f"upload{ext}"
@@ -1601,6 +1801,13 @@ def upload():
         UPLOAD_DIR, f"{int(time.time() * 1000)}_{filename}"
     )
     file.save(path)
+
+    # A shared view arrives fully formed: the frame is already structured and
+    # the view is already decided, so there is nothing to re-read or reshape.
+    shared_frame, shared_meta = _read_view_package(path)
+    if shared_frame is not None:
+        return _accept_shared_view(path, filename, display_name, shared_frame,
+                                   shared_meta)
 
     options = dict(DEFAULT_OPTIONS)
     sheets = _list_sheets(path)
@@ -1712,6 +1919,7 @@ def api_reset():
             "options": {},
             "profile": None,
             "sheets": [],
+            "shared_view": None,
         }
     )
     return jsonify({"success": True})
@@ -1979,6 +2187,133 @@ def api_export_xlsx():
             "Cache-Control": "no-store",
         },
     )
+@app.route("/api/share/view", methods=["POST"])
+def api_share_view():
+    """
+    Package the current data and view as a .pivotview file.
+
+    Carries the *structured* frame — after the reshaping the sender chose, not
+    the raw workbook — plus the view config, so the recipient opens on the same
+    view and can change anything from there.
+    """
+    frame = SESSION_DATA.get("processed_df")
+    if frame is None:
+        return _err("No dataset loaded. Upload a file first.", 404)
+
+    payload = request.get_json(silent=True) or {}
+    try:
+        blob = _view_package_bytes(
+            frame,
+            payload.get("config") or {},
+            payload.get("note"),
+            payload.get("palette"),
+        )
+    except Exception as exc:  # noqa: BLE001
+        return _err(f"Could not build the shared view: {exc}", 500)
+
+    stem = _export_stem()
+    stamp = time.strftime("%Y-%m-%d")
+    filename = f"{stem}_CP_View_{stamp}.pivotview"
+    return Response(
+        blob,
+        mimetype="application/octet-stream",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+@app.route("/api/share/html", methods=["POST"])
+def api_share_html():
+    """
+    A self-contained page showing the view, for someone without the app.
+
+    The body is the view's own Arrow — already pivoted and aggregated — so the
+    page carries what was on screen and nothing more, and needs no server, no
+    install and no network to render.
+    """
+    raw = request.get_data()
+    if not raw:
+        return _err("Nothing to share.")
+
+    try:
+        table = pa.ipc.open_stream(raw).read_all()
+        frame = table.to_pandas()
+    except Exception as exc:  # noqa: BLE001
+        return _err(f"Could not read the view: {exc}", 422)
+
+    payload = request.args
+    try:
+        config = json.loads(payload.get("config") or "{}")
+    except ValueError:
+        config = {}
+    try:
+        palette = json.loads(payload.get("palette") or "[]")
+    except ValueError:
+        palette = []
+
+    html = _render_share_page(
+        frame,
+        config=config,
+        note=payload.get("note") or "",
+        palette=palette,
+        plugin=payload.get("plugin") or "Datagrid",
+    )
+
+    stem = _export_stem()
+    stamp = time.strftime("%Y-%m-%d")
+    filename = f"{stem}_CP_View_{stamp}.html"
+    return Response(
+        html,
+        mimetype="text/html",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+def _render_share_page(frame, config, note, palette, plugin) -> str:
+    """The standalone page: the view's rows, themed, with no external assets."""
+    rows = json.loads(
+        frame.to_json(orient="records", date_format="iso", default_handler=str)
+    )
+    columns = [str(c) for c in frame.columns]
+    colours = palette or ["#db0011", "#1a1a1a", "#666666"]
+    source = SESSION_DATA.get("display_name") or SESSION_DATA.get("filename") or ""
+    reshaped = _reshape_summary(SESSION_DATA.get("options") or {})
+
+    is_chart = plugin != "Datagrid"
+    group = [c for c in (config.get("group_by") or []) if c in columns]
+    measures = [c for c in (config.get("columns") or []) if c in columns]
+
+    return render_template(
+        "share.html",
+        title=f"{os.path.splitext(source)[0] or 'Shared view'} — CP Analytics",
+        source=source,
+        made=time.strftime("%d %B %Y"),
+        note=note,
+        reshaped=reshaped,
+        columns=columns,
+        columns_json=json.dumps(columns),
+        rows_json=json.dumps(rows),
+        colours_json=json.dumps(
+            [colours[0], colours[1] if len(colours) > 1 else "#1a1a1a",
+             colours[2] if len(colours) > 2 else "#666666"]
+        ),
+        colours=[
+            colours[0],
+            colours[1] if len(colours) > 1 else "#1a1a1a",
+            colours[2] if len(colours) > 2 else "#666666",
+        ],
+        plugin=plugin,
+        is_chart=is_chart,
+        group_json=json.dumps(group),
+        measures_json=json.dumps(measures),
+    )
+
+
 @app.route("/api/kpis")
 def api_kpis():
     """Return the column profile (dtypes, missing values, anomalies) for the
