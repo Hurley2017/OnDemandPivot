@@ -111,6 +111,69 @@ def _excel_theme(primary, gradient=False, low=None, high=None):
     }
 
 
+def _write_data_sheet(book, frame, theme):
+    """
+    The structured frame as a real Excel Table, on its own sheet.
+
+    This is what lets the recipient carry on in Excel: click anywhere in the
+    table and Insert > PivotTable, and Excel builds a PivotTable over the whole
+    of it with its own field list. The table is a ListObject rather than a plain
+    range so it grows with the data and can be referenced by name.
+
+    Returns the sheet, or None if there was nothing to write.
+    """
+    from openpyxl.cell import WriteOnlyCell
+    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.utils import get_column_letter
+    from openpyxl.worksheet.table import Table, TableColumn, TableStyleInfo
+
+    if frame is None or frame.empty or frame.shape[1] == 0:
+        return None
+
+    sheet = book.create_sheet("Data")
+    sheet.freeze_panes = "A2"
+
+    header_font = Font(bold=True, color=theme["on_primary"], size=10)
+    header_fill = PatternFill("solid", fgColor=theme["primary"])
+    header_align = Alignment(horizontal="left", vertical="center")
+
+    columns = [str(c) for c in frame.columns]
+    head = []
+    for name in columns:
+        cell = WriteOnlyCell(sheet, value=name)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = header_align
+        head.append(cell)
+    sheet.append(head)
+
+    for row in frame.itertuples(index=False, name=None):
+        sheet.append(list(row))
+
+    table = Table(
+        displayName="CPData",
+        ref=f"A1:{get_column_letter(len(columns))}{len(frame) + 1}",
+    )
+    # Write-only mode cannot infer the columns from the cells, so they are
+    # declared here; without this Excel reports the file as unreadable.
+    table.tableColumns = [
+        TableColumn(id=i, name=name) for i, name in enumerate(columns, start=1)
+    ]
+    table.tableStyleInfo = TableStyleInfo(
+        name="TableStyleLight1", showRowStripes=False, showColumnStripes=False
+    )
+    sheet.add_table(table)
+    return sheet
+
+
+def _export_stem() -> str:
+    """The source file's name without its extension, for the download name."""
+    name = SESSION_DATA.get("display_name") or SESSION_DATA.get("filename") or "view"
+    stem = os.path.splitext(str(name))[0].strip() or "view"
+    # Keep it filesystem- and mail-safe.
+    return re.sub(r'[<>:"/\\|?*\x00-\x1f]', "-", stem)
+
+
 def _write_themed_sheet(sheet, frame, theme):
     """Write the frame with the dashboard's header colour and row banding."""
     from openpyxl.cell import WriteOnlyCell
@@ -1860,12 +1923,17 @@ def api_export_xlsx():
             high=request.args.get("high"),
         )
         _write_themed_sheet(sheet, frame, theme)
+        # And the structured frame behind it, so the recipient can carry on
+        # pivoting in Excel rather than just reading the result.
+        _write_data_sheet(book, SESSION_DATA.get("processed_df"), theme)
         book.save(buffer)
     except Exception as exc:  # noqa: BLE001
         return _err(f"Could not build the workbook: {exc}", 500)
 
-    stamp = time.strftime("%Y%m%d-%H%M%S")
-    filename = f"view-{stamp}.xlsx"
+    # "Sample Finance Data_CP_View_2026-09-28.xlsx" — where it came from, what
+    # it is, and when it was taken.
+    stamp = time.strftime("%Y-%m-%d")
+    filename = f"{_export_stem()}_CP_View_{stamp}.xlsx"
     return Response(
         buffer.getvalue(),
         mimetype=(
@@ -1876,8 +1944,6 @@ def api_export_xlsx():
             "Cache-Control": "no-store",
         },
     )
-
-
 @app.route("/api/kpis")
 def api_kpis():
     """Return the column profile (dtypes, missing values, anomalies) for the
