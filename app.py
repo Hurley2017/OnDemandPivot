@@ -2228,7 +2228,6 @@ def api_share_html():
         palette=palette,
         plugin=payload.get("plugin") or "Datagrid",
     )
-
     stem = _export_stem()
     stamp = time.strftime("%Y-%m-%d")
     filename = f"{stem}_CP_View_{stamp}.html"
@@ -2243,7 +2242,39 @@ def api_share_html():
 
 
 def _render_share_page(frame, config, note, palette, plugin) -> str:
-    """The standalone page: the view's rows, themed, with no external assets."""
+    """
+    The standalone page: the whole workbench, carrying its own engine.
+
+    Built from the same dashboard markup and script the app serves, so the
+    recipient is working with the real thing rather than a lookalike — which is
+    the only way the pivot controls can come with it.
+    """
+    from flask import render_template as _rt
+    from share_page import build
+
+    root = os.path.dirname(os.path.abspath(__file__))
+    markup = _rt(
+        "dashboard.html",
+        filename=SESSION_DATA.get("display_name") or "dataset",
+        rows=int(len(frame)),
+        cols=int(frame.shape[1]),
+        flagged=int((SESSION_DATA.get("profile") or {}).get("flagged_fields", 0)),
+        standalone=True,
+    )
+    return build(
+        markup,
+        _df_to_arrow_stream(frame),
+        SESSION_DATA.get("profile") or {},
+        config,
+        palette,
+        note,
+        SESSION_DATA.get("display_name") or "",
+        root,
+    )
+
+
+def _render_share_page_flat(frame, config, note, palette, plugin) -> str:
+    """The read-only page, kept for reference. Not served any more."""
     rows = json.loads(
         frame.to_json(orient="records", date_format="iso", default_handler=str)
     )

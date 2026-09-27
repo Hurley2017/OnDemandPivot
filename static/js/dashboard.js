@@ -19,12 +19,19 @@ import "../vendor/perspective/cdn/perspective-viewer-charts.js";
 
 // The core bundle guesses where its server WASM lives by rewriting a CDN-shaped
 // path. Ours is not CDN-shaped, so point it at the vendored file explicitly -
-// this runs before any worker is created, so it wins.
-perspective.init_server({
-    wasm32: () =>
-        fetch(new URL("../vendor/perspective/wasm/perspective-server.wasm",
-                      import.meta.url)).then((r) => r.arrayBuffer()),
-});
+// this runs before any worker is created, so it wins. A standalone page has no
+// vendor tree to point at, so it supplies the bytes instead.
+function loadServerWasm() {
+    if (window.__cpaServerWasm) {
+        return Promise.resolve(window.__cpaServerWasm());
+    }
+    return fetch(
+        new URL("../vendor/perspective/wasm/perspective-server.wasm",
+                import.meta.url)
+    ).then((r) => r.arrayBuffer());
+}
+
+perspective.init_server({ wasm32: loadServerWasm });
 
 const toast = (msg, kind) => window.CPA.toast(msg, kind);
 const escapeHtml = window.CPA.escapeHtml;
@@ -349,6 +356,7 @@ function initDownload() {
 
         const chart = isChart();
         const wantPivot = $("dlPivotview").checked;
+        const wantPage = $("dlStandalone").checked;
         const wantView = $("dlView").checked;
         const wantData = $("dlData").checked;
         const colors = state.palette || PALETTES[0].colors;
@@ -365,10 +373,31 @@ function initDownload() {
                 made.push("the shared view");
             }
 
+            if (wantPage) {
+                // The page carries the whole engine so the recipient can
+                // re-pivot, which is what makes it a large file.
+                const query =
+                    "?plugin=" + encodeURIComponent(state.plugin) +
+                    "&config=" + encodeURIComponent(JSON.stringify(
+                        viewConfigFrom(await $("viewer").save()))) +
+                    "&palette=" + encodeURIComponent(JSON.stringify(colors));
+                const resp = await fetch("/api/share/html" + query, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/vnd.apache.arrow.stream",
+                    },
+                    body: await viewArrow(),
+                });
+                if (!resp.ok) throw new Error(await errorText(resp));
+                saveBlob(await resp.blob(), `shared-view-${stem}.html`);
+                made.push("the standalone page");
+            }
+
             // A chart with nothing else asked for is just a picture, and that
             // is the one case that makes a PNG. If the shared view was ticked,
             // that is a choice in its own right and nothing else is added.
-            const chartOnly = chart && !wantView && !wantData && !wantPivot;
+            const chartOnly = chart && !wantView && !wantData && !wantPivot
+                && !wantPage;
             if (chartOnly) {
                 await downloadPng();
                 made.push("the chart image");
