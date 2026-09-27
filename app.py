@@ -2282,6 +2282,175 @@ def _render_share_page(frame, config, note, palette, plugin) -> str:
     )
 
 
+@app.route("/api/download/xlsx", methods=["POST"])
+def api_download_xlsx():
+    """
+    One workbook, built from whatever was ticked in the download dialog.
+
+    multipart:
+      data     the view's Arrow — the numbers on screen
+      chart    a PNG of the chart, when the view is a chart
+      options  JSON: {view, data, chart, primary, gradient, low, high}
+
+    Sheets, all optional:
+      Chart  the picture, with the numbers underneath when they were asked for
+      View   just the numbers, for a grid download
+      Data   the structured frame, as a real Excel Table
+    """
+    options = {}
+    raw_options = request.form.get("options")
+    if raw_options:
+        try:
+            options = json.loads(raw_options)
+        except ValueError:
+            options = {}
+
+    want_view = bool(options.get("view"))
+    want_data = bool(options.get("data"))
+    want_chart = bool(options.get("chart"))
+
+    raw = request.files["data"].read() if "data" in request.files else request.get_data()
+    chart_png = request.files["chart"].read() if "chart" in request.files else None
+
+    if not raw and not want_data:
+        return _err("Nothing to download.")
+
+    if not (want_view or want_data or want_chart):
+        return _err("Nothing was chosen to download.")
+
+    frame = None
+    if raw:
+        try:
+            frame = pa.ipc.open_stream(raw).read_all().to_pandas()
+        except Exception as exc:  # noqa: BLE001
+            return _err(f"Could not read the view: {exc}", 422)
+
+    if frame is not None and len(frame) > 1048575:
+        return _err(
+            "That view has more than 1,048,575 rows, which Excel cannot hold. "
+            "Filter or group the view first.",
+            422,
+        )
+
+    theme = _excel_theme(
+        options.get("primary"),
+        gradient=bool(options.get("gradient")),
+        low=options.get("low"),
+        high=options.get("high"),
+    )
+
+    buffer = io.BytesIO()
+    try:
+        book = Workbook(write_only=True)
+
+        if want_chart and chart_png:
+            _write_chart_sheet(book, chart_png, frame if want_view else None, theme)
+        elif want_view and frame is not None:
+            sheet = book.create_sheet("View")
+            sheet.freeze_panes = "A2"
+            _write_themed_sheet(sheet, frame, theme)
+
+        if want_data:
+            _write_data_sheet(book, SESSION_DATA.get("processed_df"), theme)
+
+        if not book.worksheets:
+            return _err("Nothing was chosen to download.")
+
+        book.save(buffer)
+    except Exception as exc:  # noqa: BLE001
+        return _err(f"Could not build the workbook: {exc}", 500)
+
+    stamp = time.strftime("%Y-%m-%d")
+    filename = f"{_export_stem()}_CP_View_{stamp}.xlsx"
+    return Response(
+        buffer.getvalue(),
+        mimetype=(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        ),
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+def _write_chart_sheet(book, png_bytes, frame, theme):
+    """
+    The chart, with the numbers beneath it when they were asked for.
+
+    The picture is dropped in first and the table starts below it, which is why
+    the image's height has to be measured: openpyxl cannot tell how many rows a
+    picture covers, so the first free row is worked out from its pixel height.
+    """
+    from openpyxl.drawing.image import Image as XLImage
+    from openpyxl.utils import get_column_letter
+    from openpyxl.worksheet.table import Table, TableColumn, TableStyleInfo
+    from openpyxl.cell import WriteOnlyCell
+    from openpyxl.styles import Alignment, Font, PatternFill
+
+    sheet = book.create_sheet("Chart")
+    sheet.sheet_view.showGridLines = False
+
+    image = XLImage(io.BytesIO(png_bytes))
+    image.anchor = "A1"
+    sheet.add_image(image)
+
+    if frame is None or frame.empty:
+        return sheet
+
+    # Where the numbers start: clear of the picture.
+    start_row = int(image.height / 19) + 3
+    columns = [str(c) for c in frame.columns]
+
+    header_font = Font(bold=True, color=theme["on_primary"], size=10)
+    header_fill = PatternFill("solid", fgColor=theme["primary"])
+    header_align = Alignment(horizontal="left", vertical="center")
+
+    # write-only sheets are filled strictly top to bottom, so the gap is made
+    # by writing empty rows.
+    for _ in range(start_row - 1):
+        sheet.append([])
+
+    head = []
+    for name in columns:
+        cell = WriteOnlyCell(sheet, value=name)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = header_align
+        head.append(cell)
+    sheet.append(head)
+
+    banded = len(frame) * max(1, len(columns)) <= EXCEL_BANDING_BUDGET
+    zebra = PatternFill("solid", fgColor=theme["zebra"]) if banded else None
+    for index, row in enumerate(frame.itertuples(index=False, name=None)):
+        values = list(row)
+        if banded and index % 2 == 1:
+            cells = []
+            for value in values:
+                cell = WriteOnlyCell(sheet, value=value)
+                cell.fill = zebra
+                cells.append(cell)
+            sheet.append(cells)
+        else:
+            sheet.append(values)
+
+    last_row = start_row + len(frame)
+    table = Table(displayName="CPView",
+                  ref=f"A{start_row}:{get_column_letter(len(columns))}{last_row}")
+    table.tableColumns = [
+        TableColumn(id=i, name=name) for i, name in enumerate(columns, start=1)
+    ]
+    table.tableStyleInfo = TableStyleInfo(name="TableStyleLight1",
+                                          showRowStripes=False)
+    sheet.add_table(table)
+
+    for position, name in enumerate(columns, start=1):
+        sheet.column_dimensions[get_column_letter(position)].width = min(
+            42, max(11, len(str(name)) + 3)
+        )
+    return sheet
+
+
 @app.route("/api/kpis")
 def api_kpis():
     """Return the column profile (dtypes, missing values, anomalies) for the
