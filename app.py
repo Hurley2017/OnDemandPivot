@@ -25,6 +25,7 @@ import pandas as pd
 import pyarrow as pa
 from flask import Flask, Response, jsonify, render_template, request
 from openpyxl import Workbook
+from openpyxl.utils import get_column_letter
 from werkzeug.utils import secure_filename
 
 # ---------------------------------------------------------------------------
@@ -1925,17 +1926,51 @@ def api_export_xlsx():
         _write_themed_sheet(sheet, frame, theme)
         # And the structured frame behind it, so the recipient can carry on
         # pivoting in Excel rather than just reading the result.
-        _write_data_sheet(book, SESSION_DATA.get("processed_df"), theme)
+        data_frame = SESSION_DATA.get("processed_df")
+        data_sheet = _write_data_sheet(book, data_frame, theme)
+        if data_sheet is not None:
+            # A real, live PivotTable mirroring the view on screen.
+            book.create_sheet("Pivot")
         book.save(buffer)
     except Exception as exc:  # noqa: BLE001
         return _err(f"Could not build the workbook: {exc}", 500)
+
+    payload = buffer.getvalue()
+
+    if data_sheet is not None and data_frame is not None:
+        # openpyxl cannot write a PivotTable, so it is patched into the saved
+        # zip. A failure here is harmless: the workbook still arrives with its
+        # data table, just without the pivot.
+        import tempfile
+        from pivot_xlsx import add_pivot_table
+
+        columns = [str(c) for c in data_frame.columns]
+        ref = f"A1:{get_column_letter(len(columns))}{len(data_frame) + 1}"
+        handle, tmp = tempfile.mkstemp(suffix=".xlsx")
+        os.close(handle)
+        try:
+            with open(tmp, "wb") as fh:
+                fh.write(payload)
+            try:
+                view_config = json.loads(request.args.get("view") or "{}")
+            except ValueError:
+                view_config = {}
+            if add_pivot_table(tmp, "Pivot", "Data", ref, columns,
+                               view_config, theme):
+                with open(tmp, "rb") as fh:
+                    payload = fh.read()
+        finally:
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
 
     # "Sample Finance Data_CP_View_2026-09-28.xlsx" — where it came from, what
     # it is, and when it was taken.
     stamp = time.strftime("%Y-%m-%d")
     filename = f"{_export_stem()}_CP_View_{stamp}.xlsx"
     return Response(
-        buffer.getvalue(),
+        payload,
         mimetype=(
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         ),
