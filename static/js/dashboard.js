@@ -245,8 +245,8 @@ function markActiveView() {
     window.CPA.refreshSelects();
     const dl = $("downloadBtn");
     if (dl) {
-        dl.textContent =
-            state.plugin === "Datagrid" ? "Download table" : "Download Chart";
+        // The button reads "Download" whatever the view; the dialog adapts.
+        dl.textContent = "Download";
     }
 }
 
@@ -263,23 +263,23 @@ function fillSelect(select, options, includeAllLabel) {
 
 function buildToolbar() {
     $("resetBtn").addEventListener("click", resetView);
-    $("downloadBtn").addEventListener("click", downloadCurrentView);
 }
 
-/* --------------------------------------------------------------- sharing */
+/* ------------------------------------------------------------- download */
 
 /**
- * Share the current view.
+ * One Download button, offering whatever makes sense for the view on screen.
  *
- * Two files, both from the same dialog: an editable .pivotview for a colleague
- * who has the app, and a standalone .html for anyone else. They carry different
- * things — the package carries the whole structured frame, the page carries
- * only the numbers on screen — and the dialog says so, because "share my view"
- * and "share my dataset" are not the same act.
+ * A chart view always produces its picture — the question is only how it is
+ * delivered: on its own as a PNG, or inside a workbook with the numbers and the
+ * data alongside it. A grid has no picture, so the numbers are the starting
+ * point. The shared view is separate and opt-in, because it carries the whole
+ * table rather than what is on screen, and that is a different thing to hand
+ * over.
  */
-function initShare() {
-    const btn = $("shareBtn");
-    const panel = $("sharePanel");
+function initDownload() {
+    const btn = $("downloadBtn");
+    const panel = $("downloadPanel");
     if (!btn || !panel) return;
 
     const close = () => {
@@ -287,8 +287,30 @@ function initShare() {
         btn.setAttribute("aria-expanded", "false");
     };
 
+    const isChart = () => state.plugin && state.plugin !== "Datagrid";
+
+    /** The labels and the closing note follow whatever view is open. */
+    const paint = () => {
+        const chart = isChart();
+        $("downloadHead").textContent = chart
+            ? "Download this chart"
+            : "Download this view";
+        $("dlViewLabel").innerHTML = chart
+            ? "<b>The chart and its numbers</b> — <code>.xlsx</code><br>" +
+              "<small>The picture, with the numbers underneath it on the " +
+              "same sheet.</small>"
+            : "<b>The view</b> — <code>.xlsx</code><br>" +
+              "<small>The numbers exactly as they are on screen.</small>";
+        $("dlNote").textContent = chart
+            ? "Leave the chart and the data unticked to get just the chart, " +
+              "as a PNG."
+            : "The shared view carries the whole table, the view carries only " +
+              "the numbers shown.";
+    };
+
     btn.addEventListener("click", (event) => {
         event.stopPropagation();
+        paint();
         panel.hidden = !panel.hidden;
         btn.setAttribute("aria-expanded", panel.hidden ? "false" : "true");
     });
@@ -297,80 +319,100 @@ function initShare() {
 
     const stamp = () => new Date().toISOString().slice(0, 10);
 
-    const download = (blob, fallback) => {
-        // The server names the file; fall back if the header is unreadable.
-        saveBlob(blob, fallback);
+    const postJSON = async (url, payload) => {
+        const resp = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+        });
+        if (!resp.ok) throw new Error(await errorText(resp));
+        return resp;
     };
 
-    $("shareGo").addEventListener("click", async () => {
-        const wantEditable = $("shareEditable").checked;
-        const wantHtml = $("shareHtml").checked;
-        if (!wantEditable && !wantHtml) {
-            toast("Tick at least one kind of share.", "warn");
-            return;
+    /** The current view as Arrow, for whichever file needs it. */
+    const viewArrow = async () => {
+        const viewer = $("viewer");
+        const table = await viewer.getTable();
+        const view = await table.view(viewOnlyConfig(await viewer.save()));
+        try {
+            return await view.to_arrow();
+        } finally {
+            try { await view.delete(); } catch (_err) { /* already gone */ }
         }
+    };
+
+    $("dlGo").addEventListener("click", async () => {
         if (!state.ready) {
             toast("The view is not ready yet.", "warn");
             return;
         }
 
-        const note = ($("shareNote").value || "").trim();
+        const chart = isChart();
+        const wantPivot = $("dlPivotview").checked;
+        const wantView = $("dlView").checked;
+        const wantData = $("dlData").checked;
         const colors = state.palette || PALETTES[0].colors;
         const stem = `${state.plugin.replace(/[^\w]+/g, "-")}-${stamp()}`;
-        let count = 0;
+        const made = [];
 
         try {
-            if (wantEditable) {
-                const resp = await fetch("/api/share/view", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        note,
-                        config: viewConfigFrom(await $("viewer").save()),
-                        palette: colors,
-                    }),
+            if (wantPivot) {
+                const resp = await postJSON("/api/share/view", {
+                    config: viewConfigFrom(await $("viewer").save()),
+                    palette: colors,
                 });
-                if (!resp.ok) throw new Error(await errorText(resp));
                 saveBlob(await resp.blob(), `shared-view-${stem}.pivotview`);
-                count += 1;
+                made.push("the shared view");
             }
 
-            if (wantHtml) {
-                // The page carries the view's own output, so the Arrow is taken
-                // from a view of the current config rather than the dataset.
-                const table = await $("viewer").getTable();
-                const view = await table.view(viewOnlyConfig(await $("viewer").save()));
-                let arrow;
-                try {
-                    arrow = await view.to_arrow();
-                } finally {
-                    try { await view.delete(); } catch (_err) { /* gone */ }
+            // A chart with nothing else asked for is just a picture, and that
+            // is the one case that makes a PNG. If the shared view was ticked,
+            // that is a choice in its own right and nothing else is added.
+            const chartOnly = chart && !wantView && !wantData && !wantPivot;
+            if (chartOnly) {
+                await downloadPng();
+                made.push("the chart image");
+            } else if (wantView || wantData) {
+                const form = new FormData();
+                form.append("options", JSON.stringify({
+                    view: wantView,
+                    data: wantData,
+                    // "The chart is always included" — an Excel from a chart
+                    // view carries its picture whether or not the numbers came
+                    // with it.
+                    chart: chart,
+                    primary: colors[0],
+                    gradient: state.gradient,
+                    low: colors[1],
+                    high: colors[2],
+                }));
+                form.append("data", new Blob([await viewArrow()],
+                    { type: "application/vnd.apache.arrow.stream" }));
+                if (chart) {
+                    const png = await chartPngBlob();
+                    if (png) {
+                        form.append("chart", png, "chart.png");
+                    }
                 }
-                const query =
-                    "?plugin=" + encodeURIComponent(state.plugin) +
-                    "&note=" + encodeURIComponent(note) +
-                    "&config=" + encodeURIComponent(
-                        JSON.stringify(viewConfigFrom(await $("viewer").save()))) +
-                    "&palette=" + encodeURIComponent(JSON.stringify(colors));
-                const resp = await fetch("/api/share/html" + query, {
+                const resp = await fetch("/api/download/xlsx", {
                     method: "POST",
-                    headers: { "Content-Type": "application/vnd.apache.arrow.stream" },
-                    body: arrow,
+                    body: form,
                 });
                 if (!resp.ok) throw new Error(await errorText(resp));
-                saveBlob(await resp.blob(), `shared-view-${stem}.html`);
-                count += 1;
+                saveBlob(
+                    await resp.blob(),
+                    filenameFromHeaders(resp, `view-${stem}.xlsx`)
+                );
+                made.push(wantData ? "the workbook" : "the view");
             }
 
-            close();
-            toast(
-                count === 2
-                    ? "Shared: an editable view and a standalone page."
-                    : "Shared.",
-                "success"
-            );
+            if (!made.length) {
+                toast("Tick something to download.", "warn");
+                return;
+            }            close();
+            toast("Downloaded " + made.join(" and ") + ".", "success");
         } catch (err) {
-            toast((err && err.message) || "Could not build the share.", "error");
+            toast((err && err.message) || "The download failed.", "error");
         }
     });
 }
@@ -385,6 +427,9 @@ async function errorText(resp) {
     }
     return `The server returned ${resp.status}.`;
 }
+
+/** Pull the server's explanation out of a failed response. */
+
 
 /* ------------------------------------------------------- fields panel */
 
@@ -2443,6 +2488,21 @@ function activeChartElement() {
  * each laid-out canvas onto one bitmap at its own offset.
  */
 async function downloadPng() {
+    const blob = await chartPngBlob();
+    const stamp = new Date()
+        .toISOString()
+        .slice(0, 19)
+        .replace(/[:T]/g, "-");
+    saveBlob(blob, `${state.plugin.replace(/[^\w]+/g, "-")}-${stamp}.png`);
+}
+
+/**
+ * Rasterise the chart as a PNG blob.
+ *
+ * Kept separate from the saving so the download dialog can put the same picture
+ * inside a workbook instead of handing over a file of its own.
+ */
+async function chartPngBlob() {
     const pluginEl = activeChartElement();
     if (!pluginEl || !pluginEl.shadowRoot) {
         throw new Error("This view has no chart to export.");
@@ -2476,17 +2536,12 @@ async function downloadPng() {
         );
     }
 
-    const blob = await new Promise((resolve, reject) =>
+    return new Promise((resolve, reject) =>
         canvas.toBlob(
             (b) => (b ? resolve(b) : reject(new Error("PNG encoding failed."))),
             "image/png"
         )
     );
-    const stamp = new Date()
-        .toISOString()
-        .slice(0, 19)
-        .replace(/[:T]/g, "-");
-    saveBlob(blob, `${state.plugin.replace(/[^\w]+/g, "-")}-${stamp}.png`);
 }
 
 async function downloadCurrentView() {
@@ -2859,7 +2914,7 @@ async function main() {
         buildToolbar();
         initFields();
         initResizer();
-        initShare();
+        initDownload();
         // The fields pane is where the report is built, so it starts open —
         // the same way Excel's PivotTable Fields does.
         $("fieldsBtn").click();

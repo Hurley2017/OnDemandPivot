@@ -138,47 +138,47 @@
             Show Fields
         </button>
         <div class="palette-wrap">
-            <button class="btn btn-ghost btn-sm" id="shareBtn" type="button"
+            <button class="btn btn-dark btn-sm" id="downloadBtn" type="button"
                     aria-haspopup="dialog" aria-expanded="false"
-                    title="Send this view to a colleague">
-                Share
+                    title="Download this view">
+                Download
             </button>
-            <div class="palette-panel share-panel" id="sharePanel" hidden
-                 role="dialog" aria-label="Share this view">
-                <div class="palette-head">Share this view</div>
+            <div class="palette-panel share-panel" id="downloadPanel" hidden
+                 role="dialog" aria-label="Download">
+                <div class="palette-head" id="downloadHead">Download</div>
 
                 <label class="check-row share-row">
-                    <input type="checkbox" id="shareEditable" checked>
+                    <input type="checkbox" id="dlPivotview">
                     <span>
-                        <b>Editable view</b> — <code>.pivotview</code><br>
-                        <small>A colleague with the app opens it, gets your
-                            view, and can change anything.</small>
+                        <b>Shared view</b> — <code>.pivotview</code><br>
+                        <small>Editable. A colleague with the app opens it on
+                            this view and can change anything. Carries the whole
+                            table.</small>
                     </span>
                 </label>
 
                 <label class="check-row share-row">
-                    <input type="checkbox" id="shareHtml" checked>
-                    <span>
-                        <b>Standalone page</b> — <code>.html</code><br>
-                        <small>Opens in any browser, no app needed. Shows the
-                            numbers and the chart as you see them.</small>
+                    <input type="checkbox" id="dlView" checked>
+                    <span id="dlViewLabel">
+                        <b>The view</b> — <code>.xlsx</code><br>
+                        <small>The numbers exactly as they are on screen.</small>
                     </span>
                 </label>
 
-                <div class="field share-note">
-                    <label for="shareNote">Note <span class="tag">optional</span></label>
-                    <input id="shareNote" type="text" autocomplete="off"
-                           spellcheck="false" placeholder="Q3 by segment, for review">
-                </div>
+                <label class="check-row share-row">
+                    <input type="checkbox" id="dlData">
+                    <span>
+                        <b>The data</b> — <code>.xlsx</code><br>
+                        <small>The whole table behind the view, on its own
+                            sheet.</small>
+                    </span>
+                </label>
 
-                <p class="palette-note" id="shareWarning">
-                    The editable view carries the whole table, not just what is on
-                    screen. The standalone page carries only the numbers shown.
-                </p>
+                <p class="palette-note" id="dlNote"></p>
 
                 <div class="chat-config-actions">
-                    <button class="btn btn-primary btn-sm" id="shareGo" type="button">
-                        Share
+                    <button class="btn btn-primary btn-sm" id="dlGo" type="button">
+                        Download
                     </button>
                 </div>
             </div>
@@ -205,9 +205,7 @@
             AI Assistant
             <span class="ai-state" id="aiState">No model</span>
         </button>
-        <button class="btn btn-dark btn-sm" id="downloadBtn" type="button">
-            Download
-        </button>    </div>
+    </div>
 </div>
 
 <main class="dash-layout" id="dashLayout">
