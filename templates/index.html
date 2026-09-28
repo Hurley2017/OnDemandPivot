@@ -85,8 +85,8 @@
                 <div class="dz-busy" id="dzBusy" hidden>
                     <span class="spinner spinner-dark" aria-hidden="true"></span>
                     <div class="dz-busy-copy">
-                        <b id="dzBusyName">Reading your fileâ€¦</b>
-                        <span id="dzBusyHint">Profiling every column â€” large files take a moment.</span>
+                        <b id="dzBusyName">Reading your file…</b>
+                        <span id="dzBusyHint">Profiling every column — large files take a moment.</span>
                     </div>
                 </div>
             </div>
@@ -153,7 +153,7 @@
                         <div class="panel-head">
                             Worksheet
                             <span class="section-hint">which sheet holds your table</span>
-                            <span class="tag" id="sheetCount">â€”</span>
+                            <span class="tag" id="sheetCount">—</span>
                         </div>
                         <div class="sheet-list" id="sheetList"></div>
                     </div>
@@ -234,19 +234,16 @@
                             <label class="check">
                                 <input type="checkbox" id="optHasHeader" checked>
                                 <span>First row is a header
-                                    <span class="help">Uncheck for headerless files â€” columns become â€œColumn 1â€¦Nâ€.</span>
                                 </span>
                             </label>
                             <label class="check">
                                 <input type="checkbox" id="optPromote">
                                 <span>Promote the first row to header
-                                    <span class="help">For headers that sit inside the data, e.g. after transposing.</span>
                                 </span>
                             </label>
                             <label class="check">
                                 <input type="checkbox" id="optTranspose">
-                                <span>Transpose â€” swap rows and columns
-                                    <span class="help">Turns a wide, sideways table upright.</span>
+                                <span>Transpose — swap rows and columns
                                 </span>
                             </label>
                         </div>
@@ -282,7 +279,7 @@
                                        spellcheck="false" placeholder="e.g. Account, Date">
                                 <div class="help">
                                     List a few columns to treat rows as the same
-                                    when only those agree â€” the usual case, since
+                                    when only those agree — the usual case, since
                                     two genuinely identical rows carry no extra
                                     information and removing them changes nothing.
                                 </div>
@@ -295,9 +292,9 @@
                                 </select>
                                 <div class="help">
                                     Only matters once you have narrowed the
-                                    columns above. â€œFirstâ€ keeps the earliest row
+                                    columns above. “First” keeps the earliest row
                                     and the survivor stays where that row was;
-                                    â€œlastâ€ keeps the latest and it stays where
+                                    “last” keeps the latest and it stays where
                                     that one was.
                                 </div>
                             </div>
@@ -310,7 +307,7 @@
                                 <option value="">+ add a column to sort by</option>
                             </select>
                             <div class="help">
-                                Add as many as you like â€” the first one sorts,
+                                Add as many as you like — the first one sorts,
                                 the rest break its ties in order. Click a pill to
                                 switch it between ascending and descending.
                             </div>
@@ -338,7 +335,6 @@
                             <label class="check">
                                 <input type="checkbox" id="optNormalizeCols">
                                 <span>Normalise names to snake_case
-                                    <span class="help">â€œGross Sales ($)â€ â†’ â€œgross_salesâ€.</span>
                                 </span>
                             </label>
                         </div>
@@ -369,7 +365,6 @@
                             <label class="check">
                                 <input type="checkbox" id="optCoerceNumbers">
                                 <span>Convert text numbers &amp; currency to numeric
-                                    <span class="help">â€œ$1,234.50â€, â€œ(1,234)â€ and â€œ12%â€ become numbers.</span>
                                 </span>
                             </label>
                         </div>
@@ -388,7 +383,7 @@
                                 <select id="fillMissing">
                                     <option value="none">Leave as blank</option>
                                     <option value="zero">Zero (numeric)</option>
-                                    <option value="unknown">â€œUnknownâ€ (text)</option>
+                                    <option value="unknown">“Unknown” (text)</option>
                                     <option value="ffill">Copy the value above</option>
                                     <option value="bfill">Copy the value below</option>
                                     <option value="mean">Column mean</option>
@@ -407,7 +402,7 @@
                                 <label for="replaceFind">Find &amp; replace</label>
                                 <div class="replace-row">
                                     <input id="replaceFind" type="text" autocomplete="off">
-                                    <span aria-hidden="true">â†’</span>
+                                    <span aria-hidden="true">→</span>
                                     <input id="replaceWith" type="text" autocomplete="off">
                                 </div>
                                 <div class="help">Literal text, text columns only.</div>

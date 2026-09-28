@@ -2166,10 +2166,9 @@ function renderKpiList(profile) {
                  data-name="${escapeHtml(f.name)}" tabindex="0">
                 <div class="kpi-top">
                     <span class="kpi-name" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}</span>
-                    <span class="badge ${badge}">${escapeHtml(f.kind)}</span>
+                    <span class="badge ${badge}">${escapeHtml(f.excel || "Text")}</span>
                 </div>
                 <div class="kpi-meta">
-                    <span>${escapeHtml(f.excel || "Text")}</span>
                     <span${f.missing ? ' class="warn"' : ""}>${escapeHtml(missingTxt)}</span>
                     <span><b>${escapeHtml(f.unique)}</b> distinct</span>
                 </div>
@@ -2242,18 +2241,6 @@ function selectKpi(name) {
 /* --------------------------------------------------- dataset summary */
 
 const NUMBER_FMT = new Intl.NumberFormat(undefined);
-
-function humanBytes(bytes) {
-    if (!bytes) return "0 B";
-    const units = ["B", "KB", "MB", "GB"];
-    let value = Number(bytes);
-    let unit = 0;
-    while (value >= 1024 && unit < units.length - 1) {
-        value /= 1024;
-        unit += 1;
-    }
-    return `${value.toFixed(value >= 10 || unit === 0 ? 0 : 1)} ${units[unit]}`;
-}
 
 function shortDate(iso) {
     if (!iso) return "—";
@@ -2345,14 +2332,6 @@ function renderSummary(profile) {
     }
     if (profile.text_cols) {
         add("Text columns", NUMBER_FMT.format(profile.text_cols), "groupable");
-    }
-    if (profile.memory_bytes) {
-        add("In memory", humanBytes(profile.memory_bytes), "cleaned frame");
-    }
-    if (profile.file_bytes) {
-        // The header is bare now, so the file name lives here.
-        add("Source file", humanBytes(profile.file_bytes),
-            profile.filename || "as uploaded");
     }
 
     $("summaryTag").textContent = `${tiles.length} measures`;
