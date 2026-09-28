@@ -569,4 +569,61 @@ for query, want_rules in [("", 0),
         colours = [c.rgb for c in rule.colorScale.color]
         assert "000B5394" in colours and "00F08C00" in colours, colours
 
+# --- the standalone page ----------------------------------------------------
+# Two things have to hold for a page opened from disk, where there is no origin
+# to load anything from.
+import base64 as _b64
+import json as _json
+import re as _re
+import urllib.parse as _urlparse
+
+_config = {"plugin": "Datagrid", "group_by": ["Country"],
+           "split_by": ["Segment"], "columns": ["Sales"],
+           "filter": [], "sort": [], "table": "dataset"}
+_query = ("?plugin=Datagrid&config=" + _urlparse.quote(_json.dumps(_config))
+          + "&palette="
+          + _urlparse.quote(_json.dumps(["#db0011", "#0b5394", "#f08c00"])))
+r = client.post("/api/share/html" + _query, data=client.get("/api/data").data,
+                content_type="application/vnd.apache.arrow.stream")
+assert r.status_code == 200, r.get_json()
+page = r.data.decode("utf-8")
+print("  standalone page -> %.1f MB" % (len(page) / 1e6))
+
+_vendors = _json.loads(
+    _re.search(r"var VENDORS = (\{.*?\});", page, _re.S).group(1))
+
+# The charts plugin draws in a Web Worker built from a blob URL, and a page with
+# a null origin cannot load one - every chart comes up blank. It ships a second
+# renderer that runs on the main thread, reached whenever its mode constant is
+# anything but "worker".
+_charts = _b64.b64decode(_vendors["charts"]).decode("utf-8")
+assert 'var v="in-process"' in _charts, \
+    "charts would draw in a worker, which cannot load from disk"
+assert 'var v="worker"' not in _charts, "the charts worker path is still selected"
+
+# The viewer works out where its WASM lives by resolving a relative path against
+# its own module URL, which throws for a blob module on a null origin.
+_viewer = _b64.b64decode(_vendors["viewer"]).decode("utf-8")
+assert '"perspective-viewer.wasm"' in _viewer
+assert 'new URL("../wasm/perspective-viewer.wasm"' not in _viewer
+print("  charts forced in-process; viewer WASM lookup rewritten")
+
+# The table the page carries and the profile it carries have to describe the
+# same columns. Posting the current view instead of the dataset left a
+# three-column table beside a sixteen-field profile, and the page's first render
+# asked for columns that were not there and aborted.
+_arrow_b64 = _re.search(r'var dataArrow = bytes\("([A-Za-z0-9+/=]+)"\)',
+                        page).group(1)
+try:
+    _embedded = pa.ipc.open_stream(_b64.b64decode(_arrow_b64)).read_all()
+except Exception:  # noqa: BLE001 - arrow file format rather than stream
+    _embedded = pa.ipc.open_file(_b64.b64decode(_arrow_b64)).read_all()
+_profile = _json.loads(
+    _re.search(r"var profile = (\{.*?\});\s*var config", page, _re.S).group(1))
+_fields = [f["name"] for f in _profile["fields"]]
+print("  page carries %d columns against a %d-field profile"
+      % (_embedded.num_columns, len(_fields)))
+assert list(_embedded.schema.names) == _fields, \
+    (_embedded.schema.names, _fields)
+
 print("\nALL BACKEND TESTS PASSED")

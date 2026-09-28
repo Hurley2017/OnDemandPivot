@@ -47,33 +47,55 @@ VIEWER_WASM = "static/vendor/perspective/wasm/perspective-viewer.wasm"
 
 def _patch_vendor(name: str, source: str) -> str:
     """
-    Fix the one thing that cannot work from a page with no origin.
+    Fix the two things that cannot work from a page with no origin.
 
-    The viewer bundle works out where its WASM lives by resolving a relative
-    path against its own module URL:
+    1. The viewer bundle works out where its WASM lives by resolving a relative
+       path against its own module URL:
 
-        new URL("../wasm/perspective-viewer.wasm", import.meta.url)
+           new URL("../wasm/perspective-viewer.wasm", import.meta.url)
 
-    That is fine over http, but here the module is a blob and the page has a
-    null origin, so `new URL` throws before anything can intercept the fetch.
-    Replacing the expression with the bare filename leaves `fetch` to ask for a
-    name the page's shim answers directly.
+       That is fine over http, but here the module is a blob and the page has a
+       null origin, so `new URL` throws before anything can intercept the fetch.
+       Replacing the expression with the bare filename leaves `fetch` to ask for
+       a name the page's shim answers directly.
+
+    2. The charts plugin draws in a Web Worker built from a blob URL. A page
+       opened from disk has a null origin and the browser refuses to load such a
+       worker, so every chart comes up blank. The plugin ships a second renderer
+       that runs on the main thread and is reached whenever its mode constant is
+       anything but "worker" — the same code path, just without the worker. Only
+       the standalone page takes this route; the served app keeps the worker,
+       which is the better one when there is an origin to load it from.
     """
-    if name != "viewer":
-        return source
-
-    patched, count = re.subn(
-        r'new\s+URL\(\s*"\.\./wasm/perspective-viewer\.wasm"\s*,\s*'
-        r'import\.meta\.url\s*\)',
-        '"perspective-viewer.wasm"',
-        source,
-    )
-    if not count:
-        raise RuntimeError(
-            "the viewer bundle no longer contains the expected WASM URL "
-            "expression; the standalone page would silently fail to load"
+    if name == "viewer":
+        patched, count = re.subn(
+            r'new\s+URL\(\s*"\.\./wasm/perspective-viewer\.wasm"\s*,\s*'
+            r'import\.meta\.url\s*\)',
+            '"perspective-viewer.wasm"',
+            source,
         )
-    return patched
+        if not count:
+            raise RuntimeError(
+                "the viewer bundle no longer contains the expected WASM URL "
+                "expression; the standalone page would silently fail to load"
+            )
+        return patched
+
+    if name == "charts":
+        patched, count = re.subn(
+            r'var\s+v\s*=\s*"worker"',
+            'var v="in-process"',
+            source,
+            count=1,
+        )
+        if not count:
+            raise RuntimeError(
+                "the charts bundle no longer declares its renderer mode the "
+                "expected way; charts would come up blank from disk"
+            )
+        return patched
+
+    return source
 
 
 def _b64(path: str) -> str:
