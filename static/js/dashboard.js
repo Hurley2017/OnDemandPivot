@@ -386,11 +386,13 @@ function initDownload() {
 
             if (wantPage) {
                 // The page carries the whole engine so the recipient can
-                // re-pivot, which is what makes it a large file.
+                // re-pivot. The config is our intent, not the viewer's save():
+                // save() reports every column a flat grid shows, and a grouped
+                // column appearing as a value too is what Perspective rejects.
                 const query =
                     "?plugin=" + encodeURIComponent(state.plugin) +
                     "&config=" + encodeURIComponent(JSON.stringify(
-                        viewConfigFrom(await $("viewer").save()))) +
+                        buildViewConfig(specFor(state.plugin)))) +
                     "&palette=" + encodeURIComponent(JSON.stringify(colors));
                 const resp = await fetch("/api/share/html" + query, {
                     method: "POST",

@@ -2461,9 +2461,13 @@ def _write_chart_sheet(book, png_bytes, frame, theme):
     table_px = sum(widths) * 7
 
     image = XLImage(io.BytesIO(png_bytes))
-    if image.width and image.width > table_px:
-        # Keep the aspect ratio, but never wider than the table beneath it.
-        image.height = int(image.height * (table_px / image.width))
+    # Match the picture to the table exactly, rather than only shrinking it when
+    # it happens to be wider. A chart rendered at 2x for sharpness arrives at
+    # twice its on-screen size, so "only shrink if bigger" left it oversized
+    # whenever the table was narrow.
+    if image.width:
+        ratio = table_px / image.width
+        image.height = max(1, int(image.height * ratio))
         image.width = int(table_px)
     image.anchor = "A1"
     sheet.add_image(image)
