@@ -302,15 +302,21 @@ function initDownload() {
         $("downloadHead").textContent = chart
             ? "Download this chart"
             : "Download this view";
+
+        // The chart is its own choice, and only exists on a chart view.
+        $("dlChartRow").hidden = !chart;
+        $("dlChart").checked = chart;
+
         $("dlViewLabel").innerHTML = chart
-            ? "<b>The chart and its numbers</b> — <code>.xlsx</code><br>" +
-              "<small>The picture, with the numbers underneath it on the " +
-              "same sheet.</small>"
+            ? "<b>The view</b> — <code>.xlsx</code><br>" +
+              "<small>The numbers behind the chart. With the chart ticked " +
+              "above, the two share one sheet.</small>"
             : "<b>The view</b> — <code>.xlsx</code><br>" +
               "<small>The numbers exactly as they are on screen.</small>";
+
         $("dlNote").textContent = chart
-            ? "Leave the chart and the data unticked to get just the chart, " +
-              "as a PNG."
+            ? "The chart on its own downloads as a PNG. Tick the view or the " +
+              "data as well and everything comes in one workbook."
             : "The shared view carries the whole table, the view carries only " +
               "the numbers shown.";
     };
@@ -357,6 +363,7 @@ function initDownload() {
         const chart = isChart();
         const wantPivot = $("dlPivotview").checked;
         const wantPage = $("dlStandalone").checked;
+        const wantChart = chart && $("dlChart").checked;
         const wantView = $("dlView").checked;
         const wantData = $("dlData").checked;
         const colors = state.palette || PALETTES[0].colors;
@@ -397,23 +404,23 @@ function initDownload() {
                 made.push("the standalone page");
             }
 
-            // A chart with nothing else asked for is just a picture, and that
-            // is the one case that makes a PNG. If the shared view was ticked,
-            // that is a choice in its own right and nothing else is added.
-            const chartOnly = chart && !wantView && !wantData && !wantPivot
-                && !wantPage;
+            // The chart on its own is a picture, and that is the one case that
+            // makes a PNG. Ticking the view or the data puts everything in a
+            // workbook instead, where the picture and the numbers share a
+            // sheet when both were asked for.
+            const chartOnly = wantChart && !wantView && !wantData;
             if (chartOnly) {
                 await downloadPng();
                 made.push("the chart image");
-            } else if (wantView || wantData) {
+            } else if (wantChart || wantView || wantData) {
+                if (!wantView && !wantData && !wantChart) {
+                    // nothing selected that a workbook can carry
+                }
                 const form = new FormData();
                 form.append("options", JSON.stringify({
                     view: wantView,
                     data: wantData,
-                    // "The chart is always included" — an Excel from a chart
-                    // view carries its picture whether or not the numbers came
-                    // with it.
-                    chart: chart,
+                    chart: wantChart,
                     primary: colors[0],
                     gradient: state.gradient,
                     low: colors[1],
@@ -421,7 +428,7 @@ function initDownload() {
                 }));
                 form.append("data", new Blob([await viewArrow()],
                     { type: "application/vnd.apache.arrow.stream" }));
-                if (chart) {
+                if (wantChart) {
                     const png = await chartPngBlob();
                     if (png) {
                         form.append("chart", png, "chart.png");
@@ -436,7 +443,7 @@ function initDownload() {
                     await resp.blob(),
                     filenameFromHeaders(resp, `view-${stem}.xlsx`)
                 );
-                made.push(wantData ? "the workbook" : "the view");
+                made.push("the workbook");
             }
 
             if (!made.length) {
@@ -1846,11 +1853,18 @@ function rawViewConfig(spec) {
     const filter = activeFilter();
 
     if (spec.kind === "grid") {
+        // A grid with no Values chosen shows everything — but never the columns
+        // that are already grouping axes. Perspective rejects a column that is
+        // both a split and a value ("Invalid column found in View columns"),
+        // and that is exactly what falling back to the whole schema produced
+        // once a view arrived with its grouping already set.
+        const onAxes = new Set([...group, ...split]);
+        const rest = state.schema.filter((c) => !onAxes.has(c));
         return {
             plugin: spec.plugin,
             group_by: group,
             split_by: split,
-            columns: state.columns.length ? state.columns : state.schema.slice(),
+            columns: state.columns.length ? state.columns : rest,
             filter,
             sort: state.sort,
             aggregates,
