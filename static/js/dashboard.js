@@ -365,8 +365,12 @@ function initDownload() {
 
         try {
             if (wantPivot) {
+                // Our own model of the intent, not the viewer's save(). save()
+                // reports every column a flat grid is showing, and feeding that
+                // back in makes a grouped column both an axis and a value —
+                // which Perspective rejects outright.
                 const resp = await postJSON("/api/share/view", {
-                    config: viewConfigFrom(await $("viewer").save()),
+                    config: buildViewConfig(specFor(state.plugin)),
                     palette: colors,
                 });
                 saveBlob(await resp.blob(), `shared-view-${stem}.pivotview`);
@@ -2908,17 +2912,11 @@ async function applySharedView() {
 
     const config = shared.config || {};
     if (config.plugin) state.plugin = config.plugin;
+    // Adopt the sender's intent into our model first, then build a complete
+    // config from it — the same path the toolbar uses, so a shared view and a
+    // hand-built one end up in exactly the same state.
     syncToolbarFromConfig(config);
-
-    const next = {
-        ...viewOnlyConfig(config),
-        plugin: config.plugin || "Datagrid",
-        table: TABLE_NAME,
-        columns_config: config.columns_config,
-        group_rollup_mode: config.group_rollup_mode || "rollup",
-        split_rollup_mode: config.split_rollup_mode || "rollup",
-    };
-    await applyConfig(next);
+    await applyConfig(buildViewConfig(specFor(state.plugin)));
     markActiveView();
 
     if (shared.note) {

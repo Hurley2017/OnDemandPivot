@@ -131,6 +131,32 @@ def _rewrite_imports(script: str) -> str:
     return prelude + "\n".join(out)
 
 
+def _inline_images(html: str, root: str) -> str:
+    """
+    Replace the logo with its own bytes.
+
+    A file:// page cannot fetch /static/..., so every image has to be carried
+    inside the file like everything else.
+    """
+    logos = {
+        "icon/LOGO.PNG": "image/png",
+        "icon/favicon.png": "image/png",
+        "icon/Tab Logo.png": "image/png",
+    }
+    for rel, mime in logos.items():
+        path = os.path.join(root, "static", rel.replace("/", os.sep))
+        if not os.path.isfile(path):
+            continue
+        data = f"data:{mime};base64,{_b64(path)}"
+        # The rendered src carries a ?v= cache-buster, so match loosely.
+        html = re.sub(
+            r"([\"'])/static/" + re.escape(rel) + r"[^\"']*([\"'])",
+            lambda m, d=data: m.group(1) + d + m.group(2),
+            html,
+        )
+    return html
+
+
 def build(dashboard_html, data_arrow, profile, config, palette, note, source,
           root):
     """
@@ -152,7 +178,7 @@ def build(dashboard_html, data_arrow, profile, config, palette, note, source,
     script = _rewrite_imports(_read(os.path.join(root, "static/js/dashboard.js")))
     ui_script = _read(os.path.join(root, "static/js/ui.js"))
 
-    markup = _strip_asset_tags(dashboard_html)
+    markup = _inline_images(_strip_asset_tags(dashboard_html), root)
 
     return _PAGE.format(
         title=json.dumps((source or "Shared view").rsplit(".", 1)[0]),

@@ -249,6 +249,36 @@ def _excel_theme(primary, gradient=False, low=None, high=None):
     }
 
 
+# Perspective labels a grouped column "Country (Group by 1)". That is useful
+# inside its own UI and meaningless in Excel, so it is stripped before writing.
+_GROUP_SUFFIX_RE = re.compile(r"\s*\((?:group|grouped) by \d+\)\s*$", re.I)
+
+
+def _clean_axis_names(frame):
+    """
+    Drop Perspective's own axis labels from the column names.
+
+    Done on the frame rather than on each sheet so every sheet agrees, and
+    duplicates are disambiguated afterwards because two different axes can end
+    up with the same label once the suffix is gone.
+    """
+    if frame is None or not len(frame.columns):
+        return frame
+    frame = frame.copy()
+    names, taken = [], set()
+    for column in frame.columns:
+        name = _GROUP_SUFFIX_RE.sub("", str(column)).strip() or str(column)
+        if name in taken:
+            n = 2
+            while f"{name} ({n})" in taken:
+                n += 1
+            name = f"{name} ({n})"
+        taken.add(name)
+        names.append(name)
+    frame.columns = names
+    return frame
+
+
 def _write_data_sheet(book, frame, theme):
     """
     The structured frame as a real Excel Table, on its own sheet.
@@ -2355,6 +2385,7 @@ def api_download_xlsx():
             frame = pa.ipc.open_stream(raw).read_all().to_pandas()
         except Exception as exc:  # noqa: BLE001
             return _err(f"Could not read the view: {exc}", 422)
+        frame = _clean_axis_names(frame)
 
     if frame is not None and len(frame) > 1048575:
         return _err(
@@ -2422,16 +2453,27 @@ def _write_chart_sheet(book, png_bytes, frame, theme):
     sheet = book.create_sheet("Chart")
     sheet.sheet_view.showGridLines = False
 
+    columns = [str(c) for c in frame.columns] if frame is not None else []
+
+    # Excel's column width is roughly seven pixels per unit, so the table's
+    # pixel width can be estimated well enough to size the picture to match it.
+    widths = [min(42, max(11, len(name) + 3)) for name in columns] or [11]
+    table_px = sum(widths) * 7
+
     image = XLImage(io.BytesIO(png_bytes))
+    if image.width and image.width > table_px:
+        # Keep the aspect ratio, but never wider than the table beneath it.
+        image.height = int(image.height * (table_px / image.width))
+        image.width = int(table_px)
     image.anchor = "A1"
     sheet.add_image(image)
 
     if frame is None or frame.empty:
         return sheet
 
-    # Where the numbers start: clear of the picture.
-    start_row = int(image.height / 19) + 3
-    columns = [str(c) for c in frame.columns]
+    # Two clear rows between the picture and the numbers, no more.
+    rows_for_image = int(image.height / 20) + 1
+    start_row = rows_for_image + 3
 
     header_font = Font(bold=True, color=theme["on_primary"], size=10)
     header_fill = PatternFill("solid", fgColor=theme["primary"])
