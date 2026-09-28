@@ -65,6 +65,11 @@ EXCEL_CELL_BUDGET = 500_000
 # (one row) and drops the banding.
 EXCEL_BANDING_BUDGET = 120_000
 
+# The narrowest a chart sheet is allowed to be, in pixels. The picture is sized
+# to the table, so a table of three short columns would otherwise shrink it to
+# something unreadable.
+CHART_MIN_PX = 720
+
 # What the exported workbook looks like when the caller names no colour.
 EXCEL_DEFAULT_PRIMARY = "#db0011"
 
@@ -342,15 +347,44 @@ def _export_stem() -> str:
     return re.sub(r'[<>:"/\\|?*\x00-\x1f]', "-", stem)
 
 
+def _column_width(name) -> int:
+    """A readable width for a column, guessed from its header."""
+    return min(42, max(11, len(str(name)) + 3))
+
+
+def _column_px(width_units) -> int:
+    """Excel draws a column of width N at roughly 7N + 5 pixels."""
+    return int(width_units * 7 + 5)
+
+
+def _fit_columns(sheet, names, widths=None):
+    """
+    Set readable column widths, or explicitly given ones.
+
+    This has to run *before* the first row is appended. A write-only sheet emits
+    its <cols> block ahead of the data, so a width assigned afterwards is
+    dropped without complaint and Excel falls back to its default — which is how
+    the chart ended up wider than the table it was supposed to match.
+    """
+    from openpyxl.utils import get_column_letter
+
+    for position, name in enumerate(names, start=1):
+        letter = get_column_letter(position)
+        sheet.column_dimensions[letter].width = (
+            widths[position - 1] if widths else _column_width(name)
+        )
+
+
 def _write_themed_sheet(sheet, frame, theme):
     """Write the frame with the dashboard's header colour and row banding."""
     from openpyxl.cell import WriteOnlyCell
     from openpyxl.styles import Alignment, Font, PatternFill
-    from openpyxl.utils import get_column_letter
 
     header_font = Font(bold=True, color=theme["on_primary"], size=10)
     header_fill = PatternFill("solid", fgColor=theme["primary"])
     header_align = Alignment(horizontal="left", vertical="center")
+
+    _fit_columns(sheet, frame.columns)
 
     head = []
     for name in frame.columns:
@@ -376,13 +410,6 @@ def _write_themed_sheet(sheet, frame, theme):
             sheet.append(cells)
         else:
             sheet.append(values)
-
-    # Widths guessed from the header, so the sheet opens readable.
-    for position, name in enumerate(frame.columns, start=1):
-        letter = get_column_letter(position)
-        sheet.column_dimensions[letter].width = min(
-            42, max(11, len(str(name)) + 3)
-        )
 
     if theme.get("gradient"):
         _add_colour_scale(sheet, frame, theme)
@@ -2455,16 +2482,27 @@ def _write_chart_sheet(book, png_bytes, frame, theme):
 
     columns = [str(c) for c in frame.columns] if frame is not None else []
 
-    # Excel's column width is roughly seven pixels per unit, so the table's
-    # pixel width can be estimated well enough to size the picture to match it.
-    widths = [min(42, max(11, len(name) + 3)) for name in columns] or [11]
-    table_px = sum(widths) * 7
+    # The picture is sized with the same conversion the columns are set with, so
+    # the two agree by construction and the chart cannot spill past the table
+    # beneath it. Both have to be settled before the first row is written.
+    widths = [_column_width(name) for name in columns] or [_column_width("")]
+    table_px = sum(_column_px(w) for w in widths)
+
+    # A handful of narrow columns would otherwise pin the picture to a postage
+    # stamp, so the sheet is spread out to give the chart room and the picture
+    # is sized to the result. It still matches the table exactly.
+    if columns and table_px < CHART_MIN_PX:
+        grow = CHART_MIN_PX / table_px
+        widths = [min(255, round(w * grow)) for w in widths]
+        table_px = sum(_column_px(w) for w in widths)
+
+    _fit_columns(sheet, columns or [""], widths)
 
     image = XLImage(io.BytesIO(png_bytes))
-    # Match the picture to the table exactly, rather than only shrinking it when
-    # it happens to be wider. A chart rendered at 2x for sharpness arrives at
-    # twice its on-screen size, so "only shrink if bigger" left it oversized
-    # whenever the table was narrow.
+    # Match the picture to the table rather than only shrinking it when it
+    # happens to be wider. A chart is rendered at 2x for sharpness, so it
+    # arrives at twice its on-screen size and would otherwise tower over a
+    # narrow table.
     if image.width:
         ratio = table_px / image.width
         image.height = max(1, int(image.height * ratio))
@@ -2521,10 +2559,6 @@ def _write_chart_sheet(book, png_bytes, frame, theme):
                                           showRowStripes=False)
     sheet.add_table(table)
 
-    for position, name in enumerate(columns, start=1):
-        sheet.column_dimensions[get_column_letter(position)].width = min(
-            42, max(11, len(str(name)) + 3)
-        )
     return sheet
 
 

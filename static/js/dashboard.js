@@ -354,6 +354,27 @@ function initDownload() {
         }
     };
 
+    /**
+     * The *whole* dataset as Arrow — no grouping, no aggregation.
+     *
+     * The standalone page has to carry every column, because the profile that
+     * travels with it describes every column. Posting the current view instead
+     * sent a handful of aggregated columns next to a sixteen-field profile, and
+     * the page's first render then asked for columns its table had never had —
+     * which Perspective answers with an abort. It also defeats the point: the
+     * recipient could only see the sender's aggregation, not re-pivot the data.
+     */
+    const rawArrow = async () => {
+        const viewer = $("viewer");
+        const table = await viewer.getTable();
+        const view = await table.view({});
+        try {
+            return await view.to_arrow();
+        } finally {
+            try { await view.delete(); } catch (_err) { /* already gone */ }
+        }
+    };
+
     $("dlGo").addEventListener("click", async () => {
         if (!state.ready) {
             toast("The view is not ready yet.", "warn");
@@ -399,7 +420,7 @@ function initDownload() {
                     headers: {
                         "Content-Type": "application/vnd.apache.arrow.stream",
                     },
-                    body: await viewArrow(),
+                    body: await rawArrow(),
                 });
                 if (!resp.ok) throw new Error(await errorText(resp));
                 saveBlob(await resp.blob(), `shared-view-${stem}.html`);
@@ -2362,6 +2383,18 @@ async function loadKpis() {
 
 /* ----------------------------------------------------------- Perspective */
 
+/**
+ * Perspective's way of saying "the columns asked for are not in the table".
+ *
+ * A page carries a profile of the whole dataset, but its table holds whatever
+ * the sender embedded. When the two disagree this is the error that comes back,
+ * and the render is lost unless it is handled.
+ */
+function looksLikeMissingColumns(reason) {
+    const text = (reason && (reason.message || reason)) || String(reason || "");
+    return /Invalid column .* found in View columns/i.test(text);
+}
+
 async function loadPerspective() {
     const viewer = $("viewer");
 
@@ -2386,7 +2419,25 @@ async function loadPerspective() {
     await viewer.load(worker);
 
     const initial = buildViewConfig(specFor("Datagrid"));
-    await viewer.restore(initial);
+    try {
+        await viewer.restore(initial);
+    } catch (err) {
+        if (!looksLikeMissingColumns(err)) throw err;
+        // The table is the authority on which columns exist. Fall back to
+        // letting Perspective show whatever is really in it, so the page still
+        // opens instead of dying on a profile that no longer matches.
+        const report = $("loadError");
+        if (report) report.hidden = true;
+        await viewer.restore({
+            plugin: "Datagrid",
+            group_by: [],
+            split_by: [],
+            columns: [],
+            filter: [],
+            sort: [],
+            table: TABLE_NAME,
+        });
+    }
     styleSurfaces();
     setStatus("Ready");
     state.ready = true;
